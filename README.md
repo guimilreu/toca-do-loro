@@ -51,6 +51,10 @@ npm run test:e2e        # Chrome de verdade com mic e tela fake
 ```
 
 Os testes sobem o próprio servidor em porta separada — não precisa ter nada rodando.
+`APP_URL=https://... npm run test:e2e` roda contra um deploy já no ar, e
+`FORCE_RELAY=1` obriga todas as conexões a passarem pelo TURN — é assim que se
+reproduz, sem sair da mesa, o caso de dois participantes atrás de CGNAT que não
+se enxergam direto.
 O e2e abre o Google Chrome em headless com `--use-fake-device-for-media-stream`
 e dirige tudo por CDP: entrar, falar, mutar, compartilhar tela, sair e voltar
 depois de o servidor cair. Ele confere pacotes RTP realmente recebidos, não só o

@@ -20,6 +20,8 @@ const REMOTE = process.env.APP_URL;
 const APP = REMOTE || `http://localhost:${PORT}/`;
 const DEBUG_PORT = 9333;
 const HEADLESS = process.env.HEADFUL ? [] : ['--headless=new'];
+/** FORCE_RELAY=1 simula participantes que não se enxergam direto (CGNAT): só TURN. */
+const FORCE_RELAY = Boolean(process.env.FORCE_RELAY);
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
@@ -74,8 +76,14 @@ class CDP {
 /** Guarda as RTCPeerConnection criadas pela página para o teste inspecionar. */
 const INSTRUMENT = `
   window.__pcs = [];
+  window.__forceRelay = ${FORCE_RELAY};
   const Native = window.RTCPeerConnection;
-  const Wrapped = function (...args) { const pc = new Native(...args); window.__pcs.push(pc); return pc; };
+  const Wrapped = function (config, ...rest) {
+    if (window.__forceRelay) config = { ...config, iceTransportPolicy: 'relay' };
+    const pc = new Native(config, ...rest);
+    window.__pcs.push(pc);
+    return pc;
+  };
   Wrapped.prototype = Native.prototype;
   Object.setPrototypeOf(Wrapped, Native);
   window.RTCPeerConnection = Wrapped;
