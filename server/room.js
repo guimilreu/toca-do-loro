@@ -1,174 +1,261 @@
 import { randomUUID } from 'node:crypto';
 
+import { checkPassword, hashPassword } from './tokens.js';
+
 const NAME_MAX = 24;
-/** Janela de rate limit por conexão: mensagens permitidas a cada RATE_WINDOW_MS. */
-const RATE_LIMIT = 300;
-const RATE_WINDOW_MS = 10_000;
-
+const CHAT_MAX = 800;
+const PINNED_MAX = 200;
 const CONTROL_CHARS = new RegExp('[\\u0000-\\u001F\\u007F]', 'g');
+const STATUSES = new Set(['ativo', 'ausente', 'ocupado']);
+/** Janela pra reconectar sem sair da toca: o card fica "reconectando" e volta. */
+const RESUME_MS = 15_000;
+/** SDP de uma call com 4 transceivers não passa disso nem de longe. */
+const SDP_MAX = 64 * 1024;
 
-const sanitizeName = (value) =>
-  typeof value === 'string' ? value.replace(CONTROL_CHARS, '').trim().slice(0, NAME_MAX) : '';
+export const clean = (value, max = NAME_MAX) =>
+  typeof value === 'string' ? value.replace(CONTROL_CHARS, '').trim().slice(0, max) : '';
 
-const publicPeer = ({ id, name, muted, sharing, hasMic }) => ({ id, name, muted, sharing, hasMic });
+/** Nome repetido vira "Fred (2)" em vez de duas pessoas indistinguíveis. */
+function uniqueName(wanted, taken) {
+  const base = clean(wanted) || 'Anônimo';
+  if (!taken.has(base)) return base;
+  for (let i = 2; i < 100; i++) {
+    const tentative = `${base} (${i})`;
+    if (!taken.has(tentative)) return tentative;
+  }
+  return `${base} (${randomUUID().slice(0, 4)})`;
+}
+
+const publicPeer = (peer) => ({
+  id: peer.id,
+  name: peer.name,
+  avatar: peer.avatar,
+  color: peer.color,
+  pronouns: peer.pronouns,
+  status: peer.status,
+  watching: peer.watching,
+  pending: peer.pending,
+  forcedMute: peer.forcedMute,
+  muted: peer.muted,
+  sharing: peer.sharing,
+  camera: peer.camera,
+  hasMic: peer.hasMic,
+  hand: peer.hand,
+  role: peer.role,
+});
 
 /**
- * Sala única. Guarda apenas presença — nenhuma mídia passa pelo servidor,
- * que só relaya SDP/ICE entre os pares (mesh P2P).
+ * Uma toca. Guarda presença, papéis e o chat da sessão — nada além do que está
+ * acontecendo agora. Mídia nunca passa por aqui: o servidor só relaya SDP/ICE.
  */
 export class Room {
-  #peers = new Map();
-  #lobby = new Set();
+  peers = new Map();
+  waiting = new Map();
+  blocked = new Set();
+  pinned = null;
+  locked = false;
+  passwordHash = null;
+  ownerKey = null;
 
-  /** @param {{ name: string, maxPeers: number, iceServers: () => object[] }} options */
-  constructor({ name, maxPeers, iceServers }) {
+  /**
+   * @param {object} options
+   * @param {string} options.slug endereço da sala na URL
+   * @param {string} options.name nome exibido
+   * @param {boolean} options.ephemeral some sozinha quando esvazia
+   * @param {number} options.maxPeers teto de gente simultânea
+   * @param {number} options.opensAt timestamp em ms; antes disso ninguém entra
+   */
+  constructor({ slug, name, ephemeral = true, maxPeers = 12, opensAt = 0 }) {
+    this.slug = slug;
     this.name = name;
+    this.ephemeral = ephemeral;
     this.maxPeers = maxPeers;
-    this.iceServers = iceServers;
+    this.opensAt = opensAt;
+    this.createdAt = Date.now();
+    this.emptySince = Date.now();
   }
 
   get size() {
-    return this.#peers.size;
+    return this.peers.size;
   }
 
-  attach(ws) {
-    ws.isAlive = true;
-    ws.peerId = null;
-    ws.rate = { count: 0, since: Date.now() };
-    this.#lobby.add(ws);
-
-    ws.on('pong', () => {
-      ws.isAlive = true;
-    });
-    ws.on('message', (raw) => this.#onMessage(ws, raw));
-    ws.on('close', () => this.#onClose(ws));
-    ws.on('error', () => ws.terminate());
-
-    this.#send(ws, { type: 'hello', room: this.name, count: this.size, maxPeers: this.maxPeers });
+  get needsPassword() {
+    return Boolean(this.passwordHash);
   }
 
-  #onMessage(ws, raw) {
-    const now = Date.now();
-    if (now - ws.rate.since > RATE_WINDOW_MS) ws.rate = { count: 0, since: now };
-    if (++ws.rate.count > RATE_LIMIT) {
-      this.#send(ws, { type: 'error', code: 'rate-limited' });
-      ws.close(1008, 'rate limited');
-      return;
-    }
-
-    let msg;
-    try {
-      msg = JSON.parse(raw.toString());
-    } catch {
-      return;
-    }
-    if (!msg || typeof msg.type !== 'string') return;
-
-    switch (msg.type) {
-      case 'join':
-        return this.#onJoin(ws, msg);
-      case 'signal':
-        return this.#onSignal(ws, msg);
-      case 'state':
-        return this.#onState(ws, msg);
-      case 'ping':
-        return this.#send(ws, { type: 'pong' });
-      default:
-    }
+  get info() {
+    return {
+      slug: this.slug,
+      name: this.name,
+      locked: this.locked,
+      needsPassword: this.needsPassword,
+      ephemeral: this.ephemeral,
+      maxPeers: this.maxPeers,
+      opensAt: this.opensAt,
+      pinned: this.pinned,
+      count: this.size,
+    };
   }
 
-  #onJoin(ws, msg) {
-    if (ws.peerId) return;
+  /** @returns {{code: string, detail?: object}|null} motivo da recusa, ou null se pode entrar */
+  denyReason({ password, ownerKey, invited }) {
+    const isOwner = Boolean(this.ownerKey) && this.ownerKey === ownerKey;
 
-    if (this.size >= this.maxPeers) {
-      this.#send(ws, { type: 'error', code: 'room-full', max: this.maxPeers });
-      return;
+    if (this.opensAt && Date.now() < this.opensAt && !isOwner) {
+      return { code: 'not-open', detail: { opensAt: this.opensAt } };
     }
+    if (ownerKey && this.blocked.has(ownerKey)) return { code: 'blocked' };
+    if (this.size >= this.maxPeers) return { code: 'room-full', detail: { max: this.maxPeers } };
+    if (this.locked && !isOwner) return { code: 'locked' };
+    // Convite assinado vale como senha: quem recebeu o link já foi autorizado.
+    if (this.needsPassword && !isOwner && !invited && !checkPassword(this.passwordHash, password ?? '')) {
+      return { code: 'bad-password' };
+    }
+    return null;
+  }
 
+  add(ws, { name, avatar, color, pronouns, ownerKey, hasMic, muted }) {
     const peer = {
       id: randomUUID(),
-      name: sanitizeName(msg.name) || 'Anônimo',
-      muted: Boolean(msg.muted),
+      ownerKey,
+      name: uniqueName(name, new Set([...this.peers.values()].map((p) => p.name))),
+      avatar: clean(avatar, 8),
+      color: clean(color, 16),
+      pronouns: clean(pronouns, 16),
+      status: 'ativo',
+      muted: Boolean(muted),
       sharing: false,
-      hasMic: msg.hasMic !== false,
+      camera: false,
+      hasMic: hasMic !== false,
+      hand: false,
+      watching: null,
+      pending: false,
+      dropTimer: null,
+      forcedMute: false,
+      role: 'guest',
       ws,
     };
 
-    this.#lobby.delete(ws);
-    ws.peerId = peer.id;
-    this.#peers.set(peer.id, peer);
+    // Quem cria a toca fica dono; se o dono voltar com a mesma chave, reassume.
+    if (!this.ownerKey || this.ownerKey === ownerKey) {
+      this.ownerKey = ownerKey;
+      peer.role = 'owner';
+    }
 
-    this.#send(ws, {
-      type: 'welcome',
-      self: publicPeer(peer),
-      room: this.name,
-      iceServers: this.iceServers(),
-      peers: [...this.#peers.values()].filter((p) => p.id !== peer.id).map(publicPeer),
-    });
-    this.#broadcast({ type: 'peer-joined', peer: publicPeer(peer) }, peer.id);
-    this.#updateLobby();
+    this.peers.set(peer.id, peer);
+    this.emptySince = 0;
+    return peer;
   }
 
-  #onSignal(ws, msg) {
-    const from = this.#peers.get(ws.peerId);
-    const to = typeof msg.to === 'string' ? this.#peers.get(msg.to) : null;
-    if (!from || !to || !msg.data || typeof msg.data !== 'object') return;
+  /** Conexão caiu sem avisar: segura a vaga por alguns segundos antes de tirar. */
+  detach(id) {
+    const peer = this.peers.get(id);
+    if (!peer || peer.pending) return;
 
-    // Só repassa o que o handshake precisa — nada de payload arbitrário entre clientes.
+    peer.pending = true;
+    peer.ws = null;
+    peer.dropTimer = setTimeout(() => this.drop(id), RESUME_MS);
+    peer.dropTimer.unref?.();
+    this.broadcast({ type: 'peer-state', id, pending: true });
+  }
+
+  /** Voltou a tempo: mesma pessoa, mesmo id, ninguém viu "fulano saiu". */
+  reattach(id, ws, ownerKey) {
+    const peer = this.peers.get(id);
+    if (!peer || !peer.pending || !ownerKey || peer.ownerKey !== ownerKey) return null;
+
+    clearTimeout(peer.dropTimer);
+    peer.dropTimer = null;
+    peer.pending = false;
+    peer.ws = ws;
+    this.broadcast({ type: 'peer-state', id, pending: false });
+    return peer;
+  }
+
+  drop(id) {
+    const peer = this.remove(id);
+    if (peer) this.broadcast({ type: 'peer-left', id });
+    return peer;
+  }
+
+  remove(id) {
+    const peer = this.peers.get(id);
+    if (!peer) return null;
+
+    clearTimeout(peer.dropTimer);
+    this.peers.delete(id);
+    if (!this.peers.size) this.emptySince = Date.now();
+
+    // O bastão de dono passa pra quem estiver há mais tempo na sala.
+    if (peer.role === 'owner') {
+      const next = this.peers.values().next().value;
+      if (next) {
+        next.role = 'owner';
+        this.ownerKey = next.ownerKey;
+        this.broadcast({ type: 'peer-state', id: next.id, role: 'owner' });
+      }
+    }
+    return peer;
+  }
+
+  canModerate(peer) {
+    return peer?.role === 'owner' || peer?.role === 'mod';
+  }
+
+  setPassword(password) {
+    this.passwordHash = password ? hashPassword(password) : null;
+  }
+
+  /** Só repassa o que o handshake precisa — nada de payload arbitrário entre clientes. */
+  relaySignal(from, msg) {
+    const to = typeof msg.to === 'string' ? this.peers.get(msg.to) : null;
+    if (!to || !msg.data || typeof msg.data !== 'object') return;
+
     const { description, candidate } = msg.data;
     if (!description && !candidate) return;
+    if (description && JSON.stringify(description).length > SDP_MAX) return;
 
-    this.#send(to.ws, { type: 'signal', from: from.id, data: { description, candidate } });
+    this.send(to.ws, { type: 'signal', from: from.id, data: { description, candidate } });
   }
 
-  #onState(ws, msg) {
-    const peer = this.#peers.get(ws.peerId);
-    if (!peer) return;
+  updateState(peer, msg) {
+    const changed = { type: 'peer-state', id: peer.id };
 
-    if (typeof msg.muted === 'boolean') peer.muted = msg.muted;
-    if (typeof msg.sharing === 'boolean') peer.sharing = msg.sharing;
-    if (typeof msg.hasMic === 'boolean') peer.hasMic = msg.hasMic;
+    if (typeof msg.muted === 'boolean' && !peer.forcedMute) changed.muted = peer.muted = msg.muted;
+    if (typeof msg.sharing === 'boolean') changed.sharing = peer.sharing = msg.sharing;
+    if (typeof msg.camera === 'boolean') changed.camera = peer.camera = msg.camera;
+    if (typeof msg.hasMic === 'boolean') changed.hasMic = peer.hasMic = msg.hasMic;
+    if (typeof msg.hand === 'boolean') changed.hand = peer.hand = msg.hand;
+    if (msg.watching === null || typeof msg.watching === 'string') changed.watching = peer.watching = msg.watching;
+    if (typeof msg.status === 'string' && STATUSES.has(msg.status)) changed.status = peer.status = msg.status;
 
-    this.#broadcast(
-      { type: 'peer-state', id: peer.id, muted: peer.muted, sharing: peer.sharing, hasMic: peer.hasMic },
-      peer.id,
-    );
+    this.broadcast(changed);
   }
 
-  #onClose(ws) {
-    this.#lobby.delete(ws);
-    const peer = this.#peers.get(ws.peerId);
-    if (!peer) return;
-
-    this.#peers.delete(peer.id);
-    this.#broadcast({ type: 'peer-left', id: peer.id });
-    this.#updateLobby();
+  chat(peer, text) {
+    const body = clean(text, CHAT_MAX);
+    if (!body) return;
+    this.broadcast({ type: 'chat', from: peer.id, name: peer.name, text: body, at: Date.now() });
   }
 
-  /** Marca conexões mortas (sem pong) para o heartbeat derrubar. */
-  sweep() {
-    const sockets = [...this.#lobby, ...[...this.#peers.values()].map((p) => p.ws)];
-    for (const ws of sockets) {
-      if (!ws.isAlive) {
-        ws.terminate();
-        continue;
-      }
-      ws.isAlive = false;
-      ws.ping();
+  pin(text) {
+    this.pinned = text ? clean(text, PINNED_MAX) : null;
+    this.broadcast({ type: 'pinned', text: this.pinned });
+  }
+
+  roster() {
+    return [...this.peers.values()].map(publicPeer);
+  }
+
+  broadcast(msg, exceptId) {
+    for (const peer of this.peers.values()) {
+      if (peer.id !== exceptId) this.send(peer.ws, msg);
     }
   }
 
-  #updateLobby() {
-    for (const ws of this.#lobby) this.#send(ws, { type: 'lobby', count: this.size });
-  }
-
-  #broadcast(msg, exceptId) {
-    for (const peer of this.#peers.values()) {
-      if (peer.id !== exceptId) this.#send(peer.ws, msg);
-    }
-  }
-
-  #send(ws, msg) {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+  send(ws, msg) {
+    if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
   }
 }
+
+export { publicPeer };

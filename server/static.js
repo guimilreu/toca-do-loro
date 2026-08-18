@@ -16,7 +16,38 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
-/** Resolve a URL path to a file inside ROOT, or null if it escapes the root. */
+/**
+ * Cabeçalhos de segurança. A política é fechada de propósito: a página não
+ * carrega nada de fora, não é embutível e só fala com a própria origem.
+ */
+const CSP = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "img-src 'self' data:",
+  "script-src 'self'",
+  "style-src 'self'",
+  "connect-src 'self'",
+  "media-src 'self' blob:",
+].join('; ');
+
+export function securityHeaders(req) {
+  const headers = {
+    'content-security-policy': CSP,
+    'referrer-policy': 'no-referrer',
+    'x-content-type-options': 'nosniff',
+    'permissions-policy': 'microphone=(self), camera=(self), display-capture=(self), geolocation=(), payment=()',
+    'cross-origin-opener-policy': 'same-origin',
+  };
+  if ((req.headers['x-forwarded-proto'] || '').includes('https')) {
+    headers['strict-transport-security'] = 'max-age=31536000; includeSubDomains';
+  }
+  return headers;
+}
+
+/** Resolve a URL para um arquivo dentro de ROOT, ou null se tentar escapar. */
 function resolveFile(urlPath) {
   const decoded = decodeURIComponent(urlPath.split('?')[0]);
   const relative = path.normalize(decoded).replace(/^(\.\.[/\\])+/, '');
@@ -25,15 +56,21 @@ function resolveFile(urlPath) {
   return target;
 }
 
+/** /r/<slug> é rota da aplicação, não arquivo: devolve o index. */
+const isRoomRoute = (url) => /^\/r\/[^/]*\/?$/.test(url.split('?')[0]);
+
 export async function serveStatic(req, res) {
+  const base = securityHeaders(req);
+
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    res.writeHead(405, { allow: 'GET, HEAD' }).end();
+    res.writeHead(405, { ...base, allow: 'GET, HEAD' }).end();
     return;
   }
 
-  const file = resolveFile(req.url || '/');
+  const url = req.url || '/';
+  let file = isRoomRoute(url) ? path.join(ROOT, 'index.html') : resolveFile(url);
   if (!file) {
-    res.writeHead(403).end();
+    res.writeHead(403, base).end();
     return;
   }
 
@@ -42,24 +79,23 @@ export async function serveStatic(req, res) {
     info = await stat(file);
     if (info.isDirectory()) info = await stat((file += path.sep + 'index.html'));
   } catch {
-    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('404');
+    res.writeHead(404, { ...base, 'content-type': 'text/plain; charset=utf-8' }).end('404');
     return;
   }
 
   const etag = `W/"${info.size.toString(36)}-${info.mtimeMs.toString(36)}"`;
-  const headers = {
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { ...base, etag, 'cache-control': 'no-cache' }).end();
+    return;
+  }
+
+  res.writeHead(200, {
+    ...base,
     'content-type': MIME[path.extname(file)] || 'application/octet-stream',
     'content-length': info.size,
     'cache-control': 'no-cache',
     etag,
-  };
-
-  if (req.headers['if-none-match'] === etag) {
-    res.writeHead(304, { etag, 'cache-control': 'no-cache' }).end();
-    return;
-  }
-
-  res.writeHead(200, headers);
+  });
   if (req.method === 'HEAD') return res.end();
   createReadStream(file).pipe(res);
 }
