@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { clean } from './room.js';
 import { createInvite, readInvite } from './tokens.js';
 import { toSlug } from './rooms.js';
@@ -6,6 +8,8 @@ import { toSlug } from './rooms.js';
 const RATE_LIMIT = 300;
 const RATE_WINDOW_MS = 10_000;
 const REACTIONS = new Set(['👏', '😂', '❤️', '🔥', '👍', '🎉', '🦜', '😮']);
+/** A soundboard não trafega áudio: manda o nome do som e cada um sintetiza. */
+const SOUNDS = new Set(['palmas', 'buzina', 'tambor', 'triste', 'grilo', 'loro']);
 
 /**
  * Uma conexão. Nasce no saguão (sem sala), entra numa toca e some quando cai.
@@ -101,6 +105,17 @@ export class Session {
       return;
     }
 
+    // Fila de espera: só entra depois que alguém da moderação aceitar.
+    const isOwner = Boolean(ownerKey) && room.ownerKey === ownerKey;
+    if (room.waitingEnabled && !isOwner && !invite && !msg.approved && room.size > 0) {
+      this.waitingId = randomUUID();
+      this.waitingRoom = room;
+      this.pendingJoin = msg;
+      room.addToWaiting({ id: this.waitingId, name: clean(msg.name) || 'Anônimo', session: this });
+      this.send({ type: 'waiting', room: room.info });
+      return;
+    }
+
     this.room = room;
     this.peer = room.add(this.ws, {
       name: msg.name,
@@ -127,6 +142,11 @@ export class Session {
   }
 
   leave({ graceful = true } = {}) {
+    if (this.waitingRoom) {
+      this.waitingRoom.removeFromWaiting(this.waitingId);
+      this.waitingRoom = null;
+      this.waitingId = null;
+    }
     if (!this.room || !this.peer) return;
 
     const { room, peer } = this;
@@ -170,6 +190,12 @@ export class Session {
         break;
       case 'limit':
         room.maxPeers = Math.max(2, Math.min(24, Number(msg.value) || room.maxPeers));
+        break;
+      case 'waiting':
+        room.waitingEnabled = Boolean(msg.value);
+        break;
+      case 'schedule':
+        room.opensAt = Math.max(0, Number(msg.value) || 0);
         break;
       case 'pin':
         room.pin(msg.value);
@@ -253,6 +279,26 @@ const HANDLERS = {
     s.send({ type: 'invite', token: createInvite(s.room.slug, expiresAt), expiresAt });
   },
 
+  approve: (s, msg) => {
+    const room = s.room;
+    if (!room || !room.canModerate(s.peer)) return;
+
+    const entry = room.removeFromWaiting(msg.id);
+    if (!entry) return;
+    if (!msg.accept) {
+      entry.session.send({ type: 'error', code: 'rejected' });
+      entry.session.waitingRoom = null;
+      return;
+    }
+
+    // Aceito: refaz a entrada dele como se tivesse acabado de chegar.
+    const pedido = entry.session.pendingJoin;
+    entry.session.waitingRoom = null;
+    entry.session.waitingId = null;
+    entry.session.approved = true;
+    entry.session.join({ ...pedido, approved: true });
+  },
+
   signal: (s, msg) => s.peer && s.room?.relaySignal(s.peer, msg),
   state: (s, msg) => s.peer && s.room?.updateState(s.peer, msg),
   chat: (s, msg) => s.peer && s.room?.chat(s.peer, msg.text),
@@ -260,6 +306,11 @@ const HANDLERS = {
   reaction: (s, msg) => {
     if (!s.peer || !REACTIONS.has(msg.emoji)) return;
     s.room.broadcast({ type: 'reaction', from: s.peer.id, emoji: msg.emoji });
+  },
+
+  sound: (s, msg) => {
+    if (!s.peer || !SOUNDS.has(msg.name)) return;
+    s.room.broadcast({ type: 'sound', from: s.peer.id, name: msg.name });
   },
 
   typing: (s) => {

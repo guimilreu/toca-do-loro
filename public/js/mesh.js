@@ -37,6 +37,34 @@ function tuneOpus(sdp, kbps) {
   });
 }
 
+/**
+ * Ordem de preferência de codec: RED na frente do Opus (recupera perda de pacote
+ * sem retransmitir) e, no vídeo, o que tem aceleração de hardware em mais
+ * máquinas.
+ */
+function preferCodecs(transceiver, kind) {
+  if (!RTCRtpSender.getCapabilities || !transceiver.setCodecPreferences) return;
+  try {
+    const { codecs } = RTCRtpSender.getCapabilities(kind) ?? {};
+    if (!codecs?.length) return;
+
+    const nota = (codec) => {
+      const nome = codec.mimeType.toLowerCase();
+      if (kind === 'audio') return nome.endsWith('/red') ? 0 : nome.endsWith('/opus') ? 1 : 2;
+      return nome.endsWith('/h264') ? 0 : nome.endsWith('/vp8') ? 1 : nome.endsWith('/vp9') ? 2 : 3;
+    };
+    transceiver.setCodecPreferences([...codecs].sort((a, b) => nota(a) - nota(b)));
+  } catch {
+    /* navegador sem suporte: segue com a ordem padrão */
+  }
+}
+
+/** Buffer de recepção: voz curta pra não atrasar, tela um pouco maior pra não picotar. */
+function tuneReceiver(receiver, role) {
+  if (!receiver || !('playoutDelayHint' in receiver)) return;
+  receiver.playoutDelayHint = role === 'mic' ? 0.02 : 0.15;
+}
+
 export class Mesh {
   #peers = new Map();
   #local = { mic: null, 'screen-audio': null, 'screen-video': null, camera: null };
@@ -62,19 +90,23 @@ export class Mesh {
     return [...this.#peers.keys()];
   }
 
+  /** @returns {Array<[string, RTCPeerConnection]>} */
   connections() {
-    return [...this.#peers.entries()].map(([id, peer]) => [id, peer.pc]);
+    return [...this.#peers.entries()].map(([id, peer]) => /** @type {[string, RTCPeerConnection]} */ ([id, peer.pc]));
   }
 
-  /** @param {boolean} initiator quem já estava na toca chama quem chegou. */
-  connect(id, initiator) {
+  /**
+   * @param {boolean} initiator quem já estava na toca chama quem chegou.
+   * @param {boolean} [relayOnly] segunda tentativa, forçando o caminho pelo TURN.
+   */
+  connect(id, initiator, relayOnly = false) {
     if (this.#peers.has(id)) return;
 
     const pc = new RTCPeerConnection({
       iceServers: this.iceServers,
       bundlePolicy: 'max-bundle',
       // Modo privacidade: tudo pelo TURN, ninguém descobre seu IP.
-      iceTransportPolicy: prefs.privacy ? 'relay' : 'all',
+      iceTransportPolicy: prefs.privacy || relayOnly ? 'relay' : 'all',
     });
 
     const peer = {
@@ -87,6 +119,8 @@ export class Mesh {
       chain: Promise.resolve(),
       restarts: 0,
       recoverTimer: null,
+      initiator,
+      relayOnly,
     };
     this.#peers.set(id, peer);
 
@@ -128,7 +162,10 @@ export class Mesh {
     };
 
     if (initiator) {
-      for (const role of ROLES) pc.addTransceiver(KIND_BY_ROLE[role], { direction: 'sendrecv' });
+      for (const role of ROLES) {
+        const transceiver = pc.addTransceiver(KIND_BY_ROLE[role], { direction: 'sendrecv' });
+        preferCodecs(transceiver, KIND_BY_ROLE[role]);
+      }
       this.#bindSenders(peer);
     }
   }
@@ -219,6 +256,7 @@ export class Mesh {
       if (!transceiver) return;
 
       peer.senders.set(role, transceiver.sender);
+      tuneReceiver(transceiver.receiver, role);
       if (transceiver.direction !== 'sendrecv') transceiver.direction = 'sendrecv';
 
       const track = this.#local[role];
@@ -243,8 +281,9 @@ export class Mesh {
         encoding.networkPriority = 'high';
         encoding.priority = 'high';
       } else if (role === 'screen-video') {
-        encoding.maxBitrate = this.screenCeiling ?? SCREEN_MAX_BITRATE;
+        encoding.maxBitrate = Math.min(this.screenCeiling ?? SCREEN_MAX_BITRATE, this.roomCeiling ?? SCREEN_MAX_BITRATE);
         encoding.maxFramerate = prefs.quality === '1080p60' ? 60 : 30;
+        encoding.scaleResolutionDownBy = this.downscale ?? 1;
         encoding.networkPriority = 'low';
         params.degradationPreference = prefs.motion ? 'maintain-framerate' : 'maintain-resolution';
       } else if (role === 'camera') {
@@ -263,6 +302,23 @@ export class Mesh {
    * Ajusta o teto do vídeo à banda que o navegador mediu, em vez de deixar um
    * número fixo torcendo pra dar certo.
    */
+  /** Teto que a toca inteira respeita, definido por quem administra o servidor. */
+  setRoomCeiling(bps) {
+    this.roomCeiling = bps || undefined;
+    this.retune();
+  }
+
+  /**
+   * Máquina no limite: em vez de travar, manda menos pixels. Volta sozinho
+   * quando a CPU folga.
+   */
+  setDownscale(factor) {
+    const novo = Math.max(1, Math.min(4, factor));
+    if (this.downscale === novo) return;
+    this.downscale = novo;
+    this.retune();
+  }
+
   setScreenCeiling(bps) {
     const novo = Math.max(300_000, Math.min(SCREEN_MAX_BITRATE, Math.round(bps)));
     if (this.screenCeiling && Math.abs(novo - this.screenCeiling) < 150_000) return;
@@ -273,7 +329,16 @@ export class Mesh {
   /** Nova rodada de ICE quando a conexão cai — cobre troca de rede e NAT teimoso. */
   #recover(peer, delay) {
     clearTimeout(peer.recoverTimer);
-    if (peer.restarts >= MAX_ICE_RESTARTS) return;
+
+    // Esgotadas as tentativas diretas, refaz tudo só pelo TURN: em rede que
+    // bloqueia UDP direto, esse é o caminho que sobra.
+    if (peer.restarts >= MAX_ICE_RESTARTS) {
+      if (peer.relayOnly) return;
+      const { id, initiator } = peer;
+      this.disconnect(id);
+      this.connect(id, initiator, true);
+      return;
+    }
 
     peer.recoverTimer = setTimeout(() => {
       const state = peer.pc.connectionState;

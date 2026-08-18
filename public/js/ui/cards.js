@@ -131,6 +131,12 @@ export function clear() {
 
 export function setSpeaking(id, speaking) {
   cards.get(id)?.el.classList.toggle('speaking', speaking);
+  if (speaking) spotlight(id);
+}
+
+/** No layout "foco", quem está falando ocupa o card grande. */
+function spotlight(id) {
+  for (const [other, card] of cards) card.el.classList.toggle('is-spotlight', other === id);
 }
 
 /** Quem falou por último sobe: em toca cheia é o que importa ver. */

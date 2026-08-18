@@ -7,12 +7,14 @@ const AVATARS = ['🦜', '🐢', '🦊', '🐙', '🐝', '🦑', '🐳', '🦩',
 
 export function showCall(roomName) {
   els.roomName.textContent = roomName;
+  setFavicon(true);
   show(els.joinView, false);
   show(els.callView, true);
   document.body.classList.add('in-call');
 }
 
 export function showJoin() {
+  setFavicon(false);
   show(els.callView, false);
   show(els.joinView, true);
   document.body.classList.remove('in-call');
@@ -60,6 +62,29 @@ export function setOwnerTools(visible) {
   show(els.roomBtn, visible);
 }
 
+/** Fila de espera: só quem modera vê, e decide ali mesmo. */
+export function renderWaiting(people, onDecide) {
+  show(els.waitingBar, people.length > 0);
+  els.waitingText.textContent = people.length === 1 ? '1 pessoa quer entrar:' : `${people.length} pessoas querem entrar:`;
+  els.waitingPeople.replaceChildren();
+
+  for (const person of people) {
+    const linha = element('div', 'waiting-line');
+    linha.append(element('span', 'waiting-name', person.name));
+
+    const aceitar = element('button', 'btn btn-primary btn-mini', 'Deixar entrar');
+    aceitar.type = 'button';
+    aceitar.addEventListener('click', () => onDecide(person.id, true));
+
+    const recusar = element('button', 'btn btn-quiet btn-mini', 'Agora não');
+    recusar.type = 'button';
+    recusar.addEventListener('click', () => onDecide(person.id, false));
+
+    linha.append(aceitar, recusar);
+    els.waitingPeople.append(linha);
+  }
+}
+
 /* ---------------- controles ---------------- */
 
 export function setMicButton({ muted, hasMic, forcedMute }) {
@@ -96,8 +121,40 @@ export function setHandButton(raised) {
   els.handBtn.classList.toggle('is-on', raised);
 }
 
-export function setCompact(compact) {
-  els.grid.classList.toggle('compact', compact);
+const STATUS = {
+  ativo: { rotulo: 'Disponível', proximo: 'ausente' },
+  ausente: { rotulo: 'Ausente', proximo: 'ocupado' },
+  ocupado: { rotulo: 'Não perturbe', proximo: 'ativo' },
+};
+
+export function setLayout(layout) {
+  els.grid.classList.toggle('compact', layout === 'lista');
+  els.grid.classList.toggle('foco', layout === 'foco');
+}
+
+export function setStatus(status) {
+  const info = STATUS[status] ?? STATUS.ativo;
+  els.statusDot.dataset.status = status;
+  els.statusLabel.textContent = info.rotulo;
+  return info;
+}
+
+export const nextStatus = (status) => STATUS[status]?.proximo ?? 'ativo';
+
+/** O ícone da aba muda quando você está em call: dá pra achar a aba no meio de vinte. */
+export function setFavicon(inCall) {
+  const link = /** @type {HTMLLinkElement|null} */ (document.querySelector('link[rel="icon"]'));
+  if (!link) return;
+  if (!inCall) {
+    link.href = '/favicon.svg';
+    return;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+    <rect width="64" height="64" rx="15" fill="#071429"/>
+    <circle cx="32" cy="32" r="17" fill="#12d18e"/>
+    <path d="M23 26 L5 33 L23 40 Z" fill="#ffc61e"/>
+  </svg>`;
+  link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /* ---------------- saguão ---------------- */
@@ -169,7 +226,8 @@ export function initIdentity(onChange) {
   });
 
   document.addEventListener('click', (event) => {
-    if (!els.emojiPop.hidden && !event.target.closest('#emoji-pop, #avatar-btn')) show(els.emojiPop, false);
+    const alvo = /** @type {Element} */ (event.target);
+    if (!els.emojiPop.hidden && !alvo.closest('#emoji-pop, #avatar-btn')) show(els.emojiPop, false);
   });
 }
 
@@ -177,6 +235,14 @@ export function initIdentity(onChange) {
 
 export function openPeerMenu(anchor, peer, actions) {
   els.peerMenu.replaceChildren();
+
+  if (actions.tempoDeFala > 0) {
+    const minutos = Math.floor(actions.tempoDeFala / 60);
+    const segundos = actions.tempoDeFala % 60;
+    els.peerMenu.append(
+      element('div', 'menu-info', `Falou ${minutos ? `${minutos} min ` : ''}${segundos}s nesta call`),
+    );
+  }
 
   if (!peer.isLocal) {
     const volume = element('label', 'menu-range');
@@ -203,6 +269,7 @@ export function openPeerMenu(anchor, peer, actions) {
     if (actions.isOwner) {
       els.peerMenu.append(menuButton(peer.role === 'mod' ? 'Tirar moderação' : 'Dar moderação', () => actions.onPromote()));
     }
+    els.peerMenu.append(menuButton('Mover pra outra toca…', () => actions.onMove()));
     els.peerMenu.append(menuButton('Tirar da toca', () => actions.onKick(), 'danger'));
     els.peerMenu.append(menuButton('Tirar e barrar', () => actions.onBlock(), 'danger'));
   }
@@ -227,7 +294,8 @@ function menuButton(label, onClick, variant) {
 export const closePeerMenu = () => show(els.peerMenu, false);
 
 document.addEventListener('click', (event) => {
-  if (!els.peerMenu.hidden && !event.target.closest('#peer-menu, .card')) closePeerMenu();
+  const alvo = /** @type {Element} */ (event.target);
+  if (!els.peerMenu.hidden && !alvo.closest('#peer-menu, .card')) closePeerMenu();
 });
 
 /* ---------------- avisos ---------------- */

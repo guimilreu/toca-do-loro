@@ -26,13 +26,14 @@ const field = {
   ns: $('ns-check'),
   agc: $('agc-check'),
   spatial: $('spatial-check'),
+  effect: $('effect-select'),
   sounds: $('sounds-check'),
   quality: $('quality-select'),
   motion: $('motion-check'),
   voiceRange: $('voice-range'),
   voiceValue: $('voice-value'),
   theme: $('theme-select'),
-  compact: $('compact-check'),
+  layout: $('layout-select'),
   privacy: $('privacy-check'),
   version: $('version-tag'),
 
@@ -47,6 +48,8 @@ const field = {
   limitValue: $('limit-value'),
   roomPin: $('room-pin'),
   roomLock: $('room-lock'),
+  roomWaiting: $('room-waiting'),
+  roomSchedule: $('room-schedule'),
   roomSave: $('room-save'),
   muteAll: $('mute-all-btn'),
 
@@ -57,6 +60,10 @@ const field = {
 };
 
 const VAD_WORDS = ['muito sensível', 'sensível', 'sensível', 'média', 'média', 'média', 'firme', 'firme', 'só voz alta', 'só voz alta'];
+
+export function setVersion(version) {
+  field.version.textContent = version;
+}
 
 export function openSettings() {
   dlg.settings.showModal();
@@ -132,8 +139,19 @@ export function initSettings(actions) {
   bindSwitch(field.spatial, 'spatial', actions.onSpatial);
   bindSwitch(field.sounds, 'sounds');
   bindSwitch(field.motion, 'motion', actions.onScreenTuning);
-  bindSwitch(field.compact, 'compact', actions.onCompact);
   bindSwitch(field.privacy, 'privacy', () => toast('Vale a partir da próxima conexão.'));
+
+  field.effect.value = prefs.effect;
+  field.effect.addEventListener('change', () => {
+    prefs.effect = field.effect.value;
+    actions.onGate?.();
+  });
+
+  field.layout.value = prefs.layout;
+  field.layout.addEventListener('change', () => {
+    prefs.layout = field.layout.value;
+    actions.onLayout?.(field.layout.value);
+  });
 
   field.quality.value = prefs.quality;
   field.quality.addEventListener('change', () => {
@@ -208,9 +226,12 @@ export function openRoom(room, actions) {
   field.limitValue.textContent = String(room.maxPeers);
   field.roomPin.value = room.pinned ?? '';
   field.roomLock.checked = room.locked;
+  field.roomWaiting.checked = room.waitingEnabled;
+  field.roomSchedule.value = room.opensAt ? new Date(room.opensAt - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
 
   field.roomLimit.oninput = () => (field.limitValue.textContent = field.roomLimit.value);
   field.roomLock.onchange = () => actions.onLock(field.roomLock.checked);
+  field.roomWaiting.onchange = () => actions.onWaiting(field.roomWaiting.checked);
   field.muteAll.onclick = () => actions.onMuteAll();
   field.roomSave.onclick = () => {
     actions.onSave({
@@ -218,6 +239,7 @@ export function openRoom(room, actions) {
       password: field.roomPassword.value,
       limit: Number(field.roomLimit.value),
       pinned: field.roomPin.value,
+      opensAt: field.roomSchedule.value ? new Date(field.roomSchedule.value).getTime() : 0,
     });
     dlg.room.close();
   };

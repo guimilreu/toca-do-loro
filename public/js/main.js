@@ -86,9 +86,28 @@ const quality = new Quality(
   ({ outgoing, limitation }) => {
     // O teto do vídeo segue a banda que o navegador mediu, não um número fixo.
     if (outgoing) mesh.setScreenCeiling(outgoing * 0.7);
-    if (limitation === 'cpu' && state.sharing) warnCpu();
+    if (state.sharing) {
+      applyDownscale({ cpuLimitada: limitation === 'cpu' });
+      if (limitation === 'cpu') warnCpu();
+    }
   },
 );
+
+let feedbackWarnAt = 0;
+/** Microfonia: o som saindo na caixa e voltando pelo microfone estraga a call toda. */
+setInterval(() => {
+  if (!state.inCall || state.muted || !audio.feedbackRisk()) return;
+  if (Date.now() - feedbackWarnAt < 90_000) return;
+  feedbackWarnAt = Date.now();
+  toast('Parece que o som está voltando pro seu microfone. Use fone de ouvido.', 7000);
+}, 4000);
+
+const downscale = { cpu: 1, plateia: 1 };
+function applyDownscale(motivos = {}) {
+  if ('cpuLimitada' in motivos) downscale.cpu = motivos.cpuLimitada ? 2 : 1;
+  if ('semPlateia' in motivos) downscale.plateia = motivos.semPlateia ? 2 : 1;
+  mesh.setDownscale(Math.max(downscale.cpu, downscale.plateia));
+}
 
 let cpuWarnAt = 0;
 function warnCpu() {
@@ -122,6 +141,7 @@ signaling
   })
   .on('hello', (msg) => {
     state.version ??= msg.version;
+    dialogs.setVersion(msg.version);
     if (state.version !== msg.version) shell.askReload(msg.version);
     shell.renderRooms(msg.rooms, pickRoom);
     shell.setLobby(lobbyText(msg.rooms), 'on');
@@ -139,6 +159,7 @@ signaling
     state.forcedMute = Boolean(msg.self.forcedMute);
     state.invite = msg.invite;
     mesh.configure(msg.iceServers);
+    mesh.setRoomCeiling(msg.room.maxBitrate);
     writeRoute(msg.room.slug);
     dialogs.setInvite(inviteUrl(msg.invite));
 
@@ -201,14 +222,29 @@ signaling
     if (state.room) state.room.pinned = msg.text;
     shell.setPinned(msg.text, canModerate(), () => signaling.send({ type: 'room', action: 'pin', value: '' }));
   })
+  .on('waiting', (msg) => {
+    shell.setJoining(false);
+    shell.setJoinError(`Você está na fila da toca “${msg.room.name}”. Assim que aceitarem, entra sozinho.`);
+  })
+  .on('waiting-list', (msg) => {
+    shell.renderWaiting(msg.people, (id, accept) => signaling.send({ type: 'approve', id, accept }));
+    if (msg.people.length) audio.blip('hand');
+  })
   .on('signal', (msg) => mesh.handleSignal(msg.from, msg.data))
   .on('chat', (msg) => {
     const peer = state.peers.get(msg.from);
     if (peer && blocklist.has(peer.name)) return;
-    chat.addMessage({ name: msg.name, text: msg.text, mine: msg.from === state.self?.id });
-    if (msg.from !== state.self?.id) audio.blip('chat');
+
+    const mine = msg.from === state.self?.id;
+    const mentioned = !mine && mentionsMe(msg.text);
+    chat.addMessage({ name: msg.name, text: msg.text, mine, mentioned });
+    if (mine) return;
+
+    audio.blip('chat');
+    if (mentioned) toast(`${msg.name} chamou você na conversa.`, 5000);
   })
   .on('reaction', (msg) => chat.flyReaction(msg.emoji))
+  .on('sound', (msg) => audio.play(msg.name))
   .on('typing', (msg) => chat.showTyping(msg.id, msg.name))
   .on('invite', (msg) => dialogs.setInvite(inviteUrl(msg.token)))
   .on('forced', (msg) => {
@@ -229,7 +265,7 @@ signaling
   })
   .on('move', (msg) => {
     toast(`${msg.by} te mandou pra outra toca.`);
-    leave({ silent: true, keepName: true });
+    leave({ silent: true });
     state.slug = msg.slug;
     sendJoin();
   })
@@ -253,6 +289,7 @@ function handleServerError(msg) {
     'not-open': `Essa toca abre ${new Date(msg.opensAt).toLocaleString('pt-BR')}.`,
     'too-many-rooms': 'Tem tocas demais abertas no servidor.',
     'too-many-joins': 'Muitas tentativas seguidas. Espere um minuto.',
+    rejected: 'A moderação não deixou você entrar agora.',
     'rate-limited': 'Você mandou mensagens demais. Espere um pouco.',
     'not-allowed': 'Só quem é dono da toca pode fazer isso.',
   };
@@ -296,7 +333,7 @@ function dropPeer(id) {
   cards.remove(id);
 
   for (const role of ['mic', 'screen-audio']) {
-    const el = document.getElementById(`audio-${id}-${role}`);
+    const el = /** @type {HTMLAudioElement|null} */ (document.getElementById(`audio-${id}-${role}`));
     if (el) {
       el.srcObject = null;
       el.remove();
@@ -345,13 +382,12 @@ function handleTrack(id, role, track) {
 
 function audioElement(id, role) {
   const key = `audio-${id}-${role}`;
-  let el = document.getElementById(key);
-  if (el) return el;
+  const existente = /** @type {HTMLAudioElement|null} */ (document.getElementById(key));
+  if (existente) return existente;
 
-  el = document.createElement('audio');
+  const el = document.createElement('audio');
   el.id = key;
   el.autoplay = true;
-  el.playsInline = true;
   els.audioSink.append(el);
   applySink(el);
   return el;
@@ -393,12 +429,14 @@ function refreshCall() {
   shell.setCount(state.peers.size);
 
   for (const peer of state.peers.values()) {
-    const el = document.getElementById(`audio-${peer.id}-screen-audio`);
+    const el = /** @type {HTMLAudioElement|null} */ (document.getElementById(`audio-${peer.id}-screen-audio`));
     if (el) el.muted = peer.id !== state.activeShare;
   }
 
   const watchers = [...state.peers.values()].filter((peer) => peer.watching === state.self?.id).length;
   stage.setWatchers(state.sharing ? watchers : 0);
+  // Ninguém olhando a sua tela? Manda menos pixels em vez de gastar upload à toa.
+  if (state.sharing) applyDownscale({ semPlateia: watchers === 0 });
 
   show(els.aloneHint, state.peers.size <= 1);
   audio.layout([...state.peers.keys()].filter((id) => id !== state.self?.id));
@@ -418,6 +456,7 @@ function publishState() {
     camera: state.camera,
     hasMic: state.hasMic,
     hand: state.hand,
+    status: prefs.status,
     watching: state.activeShare,
   });
 
@@ -437,6 +476,19 @@ function publishState() {
   shell.setCameraButton({ on: state.camera, supported: cameraSupported() });
   shell.setHandButton(state.hand);
 }
+
+/** Menção vale com ou sem acento e ignora maiúsculas: "@fe" acha "Fê". */
+function mentionsMe(text) {
+  const meu = normalize(state.self?.name ?? '');
+  if (!meu) return false;
+  return [...text.matchAll(/@([\p{L}\d._-]+)/gu)].some((match) => {
+    const alvo = normalize(match[1]);
+    return alvo.length > 1 && (meu.startsWith(alvo) || meu.split(' ')[0] === alvo);
+  });
+}
+
+const normalize = (text) =>
+  text.toLowerCase().normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '');
 
 const canModerate = () => ['owner', 'mod'].includes(state.peers.get(state.self?.id)?.role ?? state.self?.role);
 const isOwner = () => (state.peers.get(state.self?.id)?.role ?? state.self?.role) === 'owner';
@@ -645,6 +697,14 @@ els.chatInput.addEventListener('input', () => {
 });
 
 chat.initReactions((emoji) => signaling.send({ type: 'reaction', emoji }));
+chat.initSounds((name) => signaling.send({ type: 'sound', name }));
+
+els.statusBtn.addEventListener('click', () => {
+  const proximo = shell.nextStatus(prefs.status);
+  prefs.status = proximo;
+  shell.setStatus(proximo);
+  signaling.send({ type: 'state', status: proximo });
+});
 
 els.settingsBtn.addEventListener('click', () => dialogs.openSettings());
 
@@ -655,11 +715,13 @@ els.inviteBtn.addEventListener('click', () => {
 els.roomBtn.addEventListener('click', () => {
   dialogs.openRoom(state.room, {
     onLock: (value) => signaling.send({ type: 'room', action: 'lock', value }),
+    onWaiting: (value) => signaling.send({ type: 'room', action: 'waiting', value }),
     onMuteAll: () => signaling.send({ type: 'mod', action: 'mute-all' }),
-    onSave: ({ name, password, limit, pinned }) => {
+    onSave: ({ name, password, limit, pinned, opensAt }) => {
       signaling.send({ type: 'room', action: 'rename', value: name });
       signaling.send({ type: 'room', action: 'limit', value: limit });
       signaling.send({ type: 'room', action: 'pin', value: pinned });
+      signaling.send({ type: 'room', action: 'schedule', value: opensAt });
       if (password !== '') signaling.send({ type: 'room', action: 'password', value: password });
       toast('Toca atualizada.');
     },
@@ -675,6 +737,7 @@ els.grid.addEventListener('click', (event) => {
   shell.openPeerMenu(card, peer, {
     canModerate: canModerate(),
     isOwner: isOwner(),
+    tempoDeFala: audio.talkTime(peer.isLocal ? 'self' : peer.id),
     onVolume: (value) => {
       peer.volume = value;
       peerVolume.set(peer.name, value);
@@ -688,6 +751,10 @@ els.grid.addEventListener('click', (event) => {
     onForceMute: () => signaling.send({ type: 'mod', action: 'mute', target: peer.id, value: !peer.muted }),
     onStopScreen: () => signaling.send({ type: 'mod', action: 'stop-screen', target: peer.id }),
     onPromote: () => signaling.send({ type: 'mod', action: 'promote', target: peer.id }),
+    onMove: () => {
+      const slug = prompt(`Mandar ${peer.name} pra qual toca?`, 'sala-2');
+      if (slug) signaling.send({ type: 'mod', action: 'move', target: peer.id, slug });
+    },
     onKick: () => signaling.send({ type: 'mod', action: 'kick', target: peer.id }),
     onBlock: () => signaling.send({ type: 'mod', action: 'block', target: peer.id }),
   });
@@ -769,7 +836,7 @@ dialogs.initSettings({
   onGain: () => audio.applyGain(),
   onGate: () => audio.syncGate(),
   onSpatial: () => audio.layout([...state.peers.keys()].filter((id) => id !== state.self?.id)),
-  onCompact: (value) => shell.setCompact(value),
+  onLayout: (value) => shell.setLayout(value),
   onVoiceBitrate: () => mesh.retune(),
   onScreenTuning: () => {
     mesh.retune();
@@ -857,7 +924,9 @@ state.token = route.token;
 els.nameInput.value = prefs.name;
 els.pronounsInput.value = prefs.pronouns;
 shell.initIdentity();
-shell.setCompact(prefs.compact);
+shell.setLayout(prefs.layout);
+shell.setStatus(prefs.status);
+chat.initEmoji(els.chatInput);
 shell.setJoinRoom(route.slug, route.slug);
 shell.setMicButton(state);
 shell.setShareButton({ sharing: false, supported: screenShareSupported() });

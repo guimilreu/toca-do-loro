@@ -510,6 +510,40 @@ input::placeholder {
   color: var(--accent);
 }
 
+.waiting-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 18px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  font-size: 13.5px;
+}
+
+.waiting-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.waiting-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.waiting-name {
+  font-weight: 600;
+}
+
+.btn-mini {
+  padding: 5px 10px;
+  font-size: 12.5px;
+}
+
 .pinned {
   display: flex;
   align-items: center;
@@ -1078,6 +1112,61 @@ input::placeholder {
 .reaction:hover {
   border-color: var(--accent);
   transform: scale(1.08);
+}
+
+.sound-row {
+  padding-top: 0;
+  border-top: 1px dashed var(--line-soft);
+  margin-top: -6px;
+  padding-top: 10px;
+}
+
+.status-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--verde);
+}
+
+.status-dot[data-status="ausente"] {
+  background: var(--louro);
+}
+
+.status-dot[data-status="ocupado"] {
+  background: var(--danger);
+}
+
+.msg-mention {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-dim);
+}
+
+.mention {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* layout foco: quem fala ocupa o card grande */
+.grid.foco {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 160px));
+}
+
+.grid.foco .card.is-spotlight {
+  grid-column: span 2;
+  grid-row: span 2;
+  max-height: none;
+}
+
+.grid.foco .card.is-spotlight .avatar {
+  width: 96px;
+  height: 96px;
+  font-size: 34px;
+}
+
+.menu-info {
+  padding: 8px 11px 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .reactions-layer {

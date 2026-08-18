@@ -1,5 +1,6 @@
 /** Referências e utilidades de DOM. Nomes vêm de outras pessoas: sempre textContent. */
 
+/** @type {(id: string) => any} */
 export const $ = (id) => document.getElementById(id);
 
 export const els = {
@@ -29,6 +30,9 @@ export const els = {
   connPill: $('conn-pill'),
   connText: $('conn-text'),
   countPill: $('count-pill'),
+  waitingBar: $('waiting-bar'),
+  waitingText: $('waiting-text'),
+  waitingPeople: $('waiting-people'),
   pinnedBar: $('pinned-bar'),
   pinnedText: $('pinned-text'),
   pinnedClear: $('pinned-clear'),
@@ -54,6 +58,7 @@ export const els = {
   chatBadge: $('chat-badge'),
   typingLine: $('typing-line'),
   reactionRow: $('reaction-row'),
+  soundRow: $('sound-row'),
   reactionsLayer: $('reactions-layer'),
 
   micBtn: $('mic-btn'),
@@ -69,6 +74,10 @@ export const els = {
   camLabel: $('cam-label'),
   handBtn: $('hand-btn'),
   chatBtn: $('chat-btn'),
+  statusBtn: $('status-btn'),
+  statusDot: $('status-dot'),
+  statusLabel: $('status-label'),
+  emojiBtn: $('emoji-btn'),
   settingsBtn: $('settings-btn'),
   leaveBtn: $('leave-btn'),
 

@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "checkJs": true,
+    "allowJs": true,
+    "noEmit": true,
+    "strict": false,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "skipLibCheck": true,
+    "maxNodeModuleJsDepth": 0,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [
+    "server/**/*.js",
+    "public/js/**/*.js",
+    "test/**/*.mjs"
+  ],
+  "exclude": [
+    "node_modules",
+    "public/js/gate-worklet.js"
+  ]
+}

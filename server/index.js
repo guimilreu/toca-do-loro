@@ -60,6 +60,7 @@ const rooms = new Rooms({
   defaultSlug: toSlug(process.env.DEFAULT_ROOM || 'toca'),
   defaultName: ROOM_NAME,
   maxPeers: MAX_PEERS,
+  maxBitrate: Number(process.env.MAX_SCREEN_BITRATE || 0),
 });
 const limiter = new IpLimiter({
   maxConnections: Number(process.env.MAX_CONNECTIONS_PER_IP || 8),

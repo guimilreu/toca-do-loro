@@ -7,16 +7,17 @@ const TYPING_TTL = 3500;
 const typing = new Map();
 let unread = 0;
 
-/** Markdown mínimo: negrito, itálico, código e link. Nada é inserido como HTML. */
+/** Markdown mínimo: negrito, itálico, código, link e menção. Nunca como HTML. */
 function renderText(target, text) {
-  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|https?:\/\/\S+)/g;
+  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|https?:\/\/\S+|@[\p{L}\d._-]+)/gu;
   let last = 0;
 
   for (const match of text.matchAll(pattern)) {
     if (match.index > last) target.append(text.slice(last, match.index));
     const token = match[0];
 
-    if (token.startsWith('**')) target.append(element('strong', null, token.slice(2, -2)));
+    if (token.startsWith('@')) target.append(element('span', 'mention', token));
+    else if (token.startsWith('**')) target.append(element('strong', null, token.slice(2, -2)));
     else if (token.startsWith('`')) target.append(element('code', null, token.slice(1, -1)));
     else if (token.startsWith('*')) target.append(element('em', null, token.slice(1, -1)));
     else {
@@ -31,8 +32,39 @@ function renderText(target, text) {
   if (last < text.length) target.append(text.slice(last));
 }
 
-export function addMessage({ name, text, mine, system }) {
+const EMOJIS = ['😀','😂','🥲','😅','😉','😍','🤔','😴','🙃','😎','🤝','👋','👍','👎','👏','🙏','💪','🔥','✨','🎉','❤️','💔','☕','🍺','🍕','⚽','🎸','🎮','🐢','🦜','🌴','☀️','🌧️','🚀','💡','⚠️'];
+
+export function initEmoji(input) {
+  els.emojiBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    const open = els.emojiPop.hidden;
+    show(els.emojiPop, open);
+    if (!open) return;
+
+    els.emojiPop.replaceChildren();
+    const rect = els.emojiBtn.getBoundingClientRect();
+    els.emojiPop.style.left = `${Math.max(12, rect.left - 120)}px`;
+    els.emojiPop.style.top = `${Math.max(12, rect.top - 190)}px`;
+
+    for (const emoji of EMOJIS) {
+      const option = element('button', 'emoji-option', emoji);
+      option.type = 'button';
+      option.addEventListener('click', () => {
+        input.value += emoji;
+        show(els.emojiPop, false);
+        input.focus();
+      });
+      els.emojiPop.append(option);
+    }
+  });
+}
+
+/**
+ * @param {{ name?: string, text: string, mine?: boolean, system?: boolean, mentioned?: boolean }} msg
+ */
+export function addMessage({ name, text, mine, system, mentioned }) {
   const item = element('li', system ? 'msg msg-system' : mine ? 'msg msg-mine' : 'msg');
+  if (mentioned) item.classList.add('msg-mention');
   if (!system) item.append(element('span', 'msg-name', name));
   const body = element('span', 'msg-text');
   renderText(body, text);
@@ -76,6 +108,26 @@ function paintTyping() {
   els.typingLine.textContent =
     names.length === 1 ? `${names[0]} está escrevendo…` : names.length ? `${names.length} pessoas escrevendo…` : '';
   show(els.typingLine, names.length > 0);
+}
+
+const SOUNDS = [
+  ['palmas', '👏', 'Palmas'],
+  ['buzina', '📯', 'Buzina'],
+  ['tambor', '🥁', 'Tambor'],
+  ['triste', '😢', 'Que pena'],
+  ['grilo', '🦗', 'Silêncio'],
+  ['loro', '🦜', 'Loro'],
+];
+
+export function initSounds(onPick) {
+  els.soundRow.replaceChildren();
+  for (const [nome, emoji, titulo] of SOUNDS) {
+    const button = element('button', 'reaction', emoji);
+    button.type = 'button';
+    button.title = titulo;
+    button.addEventListener('click', () => onPick(nome));
+    els.soundRow.append(button);
+  }
 }
 
 export function initReactions(onPick) {

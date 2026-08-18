@@ -10,11 +10,21 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/signaling.test.mjs && node test/e2e.mjs",
+    "test": "npm run test:unit && npm run test:signaling && npm run test:e2e",
     "test:signaling": "node test/signaling.test.mjs",
-    "test:e2e": "node test/e2e.mjs"
+    "test:e2e": "node test/e2e.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "tsc -p jsconfig.json",
+    "test:unit": "node --test test/unit.test.mjs"
   },
   "dependencies": {
     "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2"
   }
 }

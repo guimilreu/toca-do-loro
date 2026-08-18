@@ -41,6 +41,8 @@ const { check, finish } = reporter();
 
 /* ---------- cliente CDP mínimo ---------- */
 class CDP {
+  /** @type {any} */
+  ws;
   #id = 0;
   #pending = new Map();
 
@@ -104,6 +106,13 @@ const STATS = `
 `;
 
 class Page {
+  /** @type {CDP} */
+  cdp;
+  /** @type {string} */
+  sessionId;
+  /** @type {string} */
+  name;
+
   constructor(cdp, sessionId, name) {
     Object.assign(this, { cdp, sessionId, name });
   }

@@ -32,7 +32,7 @@ export class AudioHub {
 
   get context() {
     if (!this.#ctx) {
-      this.#ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.#ctx = new (window.AudioContext || /** @type {any} */ (window).webkitAudioContext)();
       this.#master = this.#ctx.createGain();
       this.#master.connect(this.#ctx.destination);
     }
@@ -78,7 +78,7 @@ export class AudioHub {
     highpass.connect(gain);
     gain.connect(destination);
 
-    this.#mic = { stream, source, highpass, gain, destination, gate: null, level: 0, speaking: false };
+    this.#mic = { stream, source, highpass, gain, destination, gate: null, level: 0, speaking: false, talk: 0 };
     this.applyGain();
     this.#attachGate();
     this.#start();
@@ -111,7 +111,11 @@ export class AudioHub {
 
   /** Repassa ao worklet o que o usuário escolheu nos ajustes. */
   syncGate() {
-    this.#mic?.gate?.port.postMessage({ enabled: prefs.gate, threshold: vadThreshold(prefs.vad) });
+    this.#mic?.gate?.port.postMessage({
+      enabled: prefs.gate,
+      threshold: vadThreshold(prefs.vad),
+      effect: prefs.effect ?? 'none',
+    });
   }
 
   applyGain() {
@@ -175,6 +179,7 @@ export class AudioHub {
       muted: false,
       lastLoud: 0,
       speaking: false,
+      talk: 0,
     });
     this.#start();
   }
@@ -227,38 +232,88 @@ export class AudioHub {
   /** Sons curtos sintetizados: nenhum arquivo pra baixar, nenhuma licença pra checar. */
   blip(kind = 'join') {
     if (!prefs.sounds) return;
-    const ctx = this.context;
-    const notes = {
-      join: [660, 880],
-      leave: [520, 390],
-      hand: [880, 1320],
-      chat: [740],
-    }[kind] ?? [660];
+    const notes = { join: [660, 880], leave: [520, 390], hand: [880, 1320], chat: [740] }[kind] ?? [660];
+    notes.forEach((freq, index) => this.#tone({ freq, delay: index * 0.09, volume: 0.14 }));
+  }
 
-    notes.forEach((freq, index) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const start = ctx.currentTime + index * 0.09;
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.14, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(start);
-      osc.stop(start + 0.2);
-    });
+  #tone({ freq, delay = 0, volume = 0.15, duration = 0.18, type = 'sine', sweep = 0 }) {
+    const ctx = this.context;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const start = ctx.currentTime + delay;
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    if (sweep) osc.frequency.exponentialRampToValueAtTime(Math.max(30, freq * sweep), start + duration);
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + duration + 0.05);
+  }
+
+  /** Ruído curto — base de palma, prato e tambor. */
+  #noise({ duration = 0.25, volume = 0.2, highpass = 800 }) {
+    const ctx = this.context;
+    const frames = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames) ** 2;
+
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    source.buffer = buffer;
+    filter.type = 'highpass';
+    filter.frequency.value = highpass;
+    gain.gain.value = volume;
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    source.start();
   }
 
   /**
-   * Microfonia: a mesma faixa de frequência aparecendo forte na sua entrada e na
-   * saída de alguém ao mesmo tempo é caixa aberta perto do microfone.
+   * Soundboard: cada som é sintetizado na hora e tocado localmente por quem
+   * recebe o aviso — não gasta um byte de banda de áudio.
+   */
+  play(sound) {
+    this.resume();
+    const receitas = {
+      palmas: () => {
+        for (let i = 0; i < 12; i++) setTimeout(() => this.#noise({ duration: 0.12, volume: 0.12 }), i * 70 + Math.random() * 40);
+      },
+      buzina: () => {
+        this.#tone({ freq: 420, volume: 0.18, duration: 0.5, type: 'sawtooth' });
+        this.#tone({ freq: 528, volume: 0.14, duration: 0.5, type: 'sawtooth' });
+      },
+      tambor: () => {
+        this.#tone({ freq: 180, volume: 0.3, duration: 0.22, type: 'sine', sweep: 0.3 });
+        this.#noise({ duration: 0.18, volume: 0.15, highpass: 1800 });
+      },
+      triste: () => [0, 1, 2, 3].forEach((i) => this.#tone({ freq: 330 * 0.89 ** i, delay: i * 0.16, duration: 0.2, type: 'triangle' })),
+      grilo: () => [0, 1, 2].forEach((i) => this.#tone({ freq: 2400, delay: i * 0.35, duration: 0.05, volume: 0.08 })),
+      loro: () => [880, 1320, 990, 1480].forEach((freq, i) => this.#tone({ freq, delay: i * 0.08, duration: 0.09, type: 'square', volume: 0.1 })),
+    };
+    receitas[sound]?.();
+  }
+
+  /**
+   * Microfonia: se cada vez que alguém fala o seu microfone também acende, o som
+   * está saindo na caixa e voltando pelo mic.
    */
   feedbackRisk() {
     if (!this.#mic?.speaking) return false;
     for (const peer of this.#peers.values()) if (peer.speaking) return true;
     return false;
+  }
+
+  /** Segundos que cada pessoa passou falando nesta sessão. */
+  talkTime(id) {
+    return Math.round((id === 'self' ? this.#mic?.talk : this.#peers.get(id)?.talk) ?? 0);
   }
 
   /* ---------------- laço de medição ---------------- */
@@ -268,18 +323,23 @@ export class AudioHub {
   }
 
   #tick() {
-    this.#raf = null;
     const now = performance.now();
+    const decorrido = this.#raf ? Math.min(0.2, (now - this.#raf.at) / 1000) : 0;
+    this.#raf = null;
     const limiar = vadThreshold(prefs.vad);
 
     // O nível do microfone vem do worklet; aqui só repassamos pra interface.
-    if (this.#mic) this.onLevel('self', this.#mic.speaking, this.#mic.level);
+    if (this.#mic) {
+      if (this.#mic.speaking) this.#mic.talk += decorrido;
+      this.onLevel('self', this.#mic.speaking, this.#mic.level);
+    }
 
     for (const [id, peer] of this.#peers) {
       peer.analyser.getByteTimeDomainData(peer.data);
       const level = rms(peer.data);
       if (level > limiar) peer.lastLoud = now;
       peer.speaking = now - peer.lastLoud < SPEAK_HOLD_MS;
+      if (peer.speaking) peer.talk += decorrido;
       this.onLevel(id, peer.speaking, level);
     }
 
@@ -287,7 +347,7 @@ export class AudioHub {
   }
 
   destroy() {
-    cancelAnimationFrame(this.#raf);
+    cancelAnimationFrame(this.#raf?.id);
     this.#raf = null;
     for (const id of [...this.#peers.keys()]) this.removePeer(id);
     this.#mic?.source.disconnect();

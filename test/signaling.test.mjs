@@ -19,6 +19,7 @@ const open = (label) =>
     ws.on('error', reject);
   });
 
+/** @type {(ws: any, type: string, ms?: number, where?: (msg: any) => boolean) => Promise<any>} */
 const waitFor = (ws, type, ms = 2500, where = () => true) =>
   new Promise((resolve, reject) => {
     const started = Date.now();
@@ -37,6 +38,7 @@ const waitFor = (ws, type, ms = 2500, where = () => true) =>
 
 const send = (ws, msg) => ws.send(JSON.stringify(msg));
 
+/** @type {(label: string, options?: object) => Promise<any>} */
 async function enter(label, options = {}) {
   const ws = await open(label);
   await waitFor(ws, 'hello');
@@ -181,6 +183,46 @@ try {
   const welcomeVolta = await waitFor(voltou, 'welcome');
   check('retomada mantém o mesmo id', welcomeVolta.resumed === true && welcomeVolta.self.id === antesDeCair);
   voltou.close();
+
+  /* ---------- sala de espera ---------- */
+  const anfitria = await enter('Fá', { slug: 'com-fila' });
+  await waitFor(anfitria, 'welcome');
+  send(anfitria, { type: 'room', action: 'waiting', value: true });
+  await sleep(150);
+
+  const naFila = await enter('Gus', { slug: 'com-fila' });
+  const espera = await waitFor(naFila, 'waiting');
+  check('quem chega vai pra fila', espera.room.slug === 'com-fila');
+  const fila = await waitFor(anfitria, 'waiting-list');
+  check('moderação vê a fila', fila.people.length === 1 && fila.people[0].name === 'Gus');
+
+  send(anfitria, { type: 'approve', id: fila.people[0].id, accept: true });
+  check('aceitar tira da fila e entra', (await waitFor(naFila, 'welcome')).room.slug === 'com-fila');
+
+  const recusado = await enter('Hal', { slug: 'com-fila' });
+  await waitFor(recusado, 'waiting');
+  const fila2 = await waitFor(anfitria, 'waiting-list', 2500, (m) => m.people.length > 0);
+  send(anfitria, { type: 'approve', id: fila2.people[0].id, accept: false });
+  check('recusar avisa quem esperava', (await waitFor(recusado, 'error')).code === 'rejected');
+  recusado.close();
+  naFila.close();
+  anfitria.close();
+  await sleep(150);
+
+  /* ---------- soundboard ---------- */
+  const dj = await enter('DJ', { slug: 'som' });
+  await waitFor(dj, 'welcome');
+  const ouvinte = await enter('Ouvinte', { slug: 'som' });
+  await waitFor(ouvinte, 'welcome');
+  await waitFor(dj, 'peer-joined');
+  send(dj, { type: 'sound', name: 'buzina' });
+  check('soundboard avisa sem trafegar áudio', (await waitFor(ouvinte, 'sound')).name === 'buzina');
+  send(dj, { type: 'sound', name: 'explosao-nuclear' });
+  send(dj, { type: 'chat', text: 'fim' });
+  check('som fora da lista é ignorado', (await waitFor(ouvinte, 'chat')).text === 'fim');
+  dj.close();
+  ouvinte.close();
+  await sleep(150);
 
   /* ---------- limites ---------- */
   const cheia = [];

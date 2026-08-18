@@ -1,0 +1,27 @@
+name: testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  provas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:signaling
+
+      # O e2e precisa de um Chrome de verdade: o runner já traz um.
+      - run: npm run test:e2e
+        env:
+          CHROME_PATH: /usr/bin/google-chrome

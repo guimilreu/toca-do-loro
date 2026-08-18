@@ -22,10 +22,11 @@ export const toSlug = (value) =>
 export class Rooms {
   #rooms = new Map();
 
-  constructor({ defaultSlug, defaultName, maxPeers, maxRooms = 50 }) {
+  constructor({ defaultSlug, defaultName, maxPeers, maxRooms = 50, maxBitrate = 0 }) {
     this.defaultSlug = defaultSlug;
     this.maxPeers = maxPeers;
     this.maxRooms = maxRooms;
+    this.maxBitrate = maxBitrate;
     this.get(defaultSlug, { name: defaultName, ephemeral: false });
   }
 
@@ -46,6 +47,7 @@ export class Rooms {
       ephemeral: options.ephemeral ?? true,
       maxPeers: options.maxPeers || this.maxPeers,
       opensAt: options.opensAt || 0,
+      maxBitrate: this.maxBitrate,
     });
     this.#rooms.set(key, room);
     return room;

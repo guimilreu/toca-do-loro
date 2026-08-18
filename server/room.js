@@ -51,6 +51,7 @@ const publicPeer = (peer) => ({
 export class Room {
   peers = new Map();
   waiting = new Map();
+  waitingEnabled = false;
   blocked = new Set();
   pinned = null;
   locked = false;
@@ -61,11 +62,13 @@ export class Room {
    * @param {object} options
    * @param {string} options.slug endereço da sala na URL
    * @param {string} options.name nome exibido
-   * @param {boolean} options.ephemeral some sozinha quando esvazia
-   * @param {number} options.maxPeers teto de gente simultânea
-   * @param {number} options.opensAt timestamp em ms; antes disso ninguém entra
+   * @param {boolean} [options.ephemeral] some sozinha quando esvazia
+   * @param {number} [options.maxPeers] teto de gente simultânea
+   * @param {number} [options.opensAt] timestamp em ms; antes disso ninguém entra
+   * @param {number} [options.maxBitrate] teto de vídeo que a toca inteira respeita
    */
-  constructor({ slug, name, ephemeral = true, maxPeers = 12, opensAt = 0 }) {
+  constructor({ slug, name, ephemeral = true, maxPeers = 12, opensAt = 0, maxBitrate = 0 }) {
+    this.maxBitrate = maxBitrate;
     this.slug = slug;
     this.name = name;
     this.ephemeral = ephemeral;
@@ -89,15 +92,20 @@ export class Room {
       name: this.name,
       locked: this.locked,
       needsPassword: this.needsPassword,
+      waitingEnabled: this.waitingEnabled,
       ephemeral: this.ephemeral,
       maxPeers: this.maxPeers,
       opensAt: this.opensAt,
+      maxBitrate: this.maxBitrate,
       pinned: this.pinned,
       count: this.size,
     };
   }
 
-  /** @returns {{code: string, detail?: object}|null} motivo da recusa, ou null se pode entrar */
+  /**
+   * @param {{ password?: string, ownerKey?: string|null, invited?: boolean }} pedido
+   * @returns {{code: string, detail?: object}|null} motivo da recusa, ou null se pode entrar
+   */
   denyReason({ password, ownerKey, invited }) {
     const isOwner = Boolean(this.ownerKey) && this.ownerKey === ownerKey;
 
@@ -114,6 +122,11 @@ export class Room {
     return null;
   }
 
+  /**
+   * @param {any} ws
+   * @param {{ name?: string, avatar?: string, color?: string, pronouns?: string,
+   *           ownerKey?: string|null, hasMic?: boolean, muted?: boolean }} dados
+   */
   add(ws, { name, avatar, color, pronouns, ownerKey, hasMic, muted }) {
     const peer = {
       id: randomUUID(),
@@ -200,6 +213,26 @@ export class Room {
 
   canModerate(peer) {
     return peer?.role === 'owner' || peer?.role === 'mod';
+  }
+
+  /** Fila de espera: quem chega fica visível só pra quem modera, até ser aceito. */
+  addToWaiting(entry) {
+    this.waiting.set(entry.id, entry);
+    this.notifyWaiting();
+  }
+
+  removeFromWaiting(id) {
+    const entry = this.waiting.get(id);
+    this.waiting.delete(id);
+    this.notifyWaiting();
+    return entry;
+  }
+
+  notifyWaiting() {
+    const people = [...this.waiting.values()].map(({ id, name }) => ({ id, name }));
+    for (const peer of this.peers.values()) {
+      if (this.canModerate(peer)) this.send(peer.ws, { type: 'waiting-list', people });
+    }
   }
 
   setPassword(password) {

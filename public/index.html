@@ -209,6 +209,11 @@
         </div>
       </header>
 
+      <div id="waiting-bar" class="waiting-bar" hidden>
+        <span id="waiting-text"></span>
+        <div id="waiting-people" class="waiting-people"></div>
+      </div>
+
       <div id="pinned-bar" class="pinned" hidden>
         <svg aria-hidden="true"><use href="#i-link" /></svg>
         <span id="pinned-text"></span>
@@ -259,12 +264,14 @@
           <ol id="chat-log" class="chat-log" aria-live="polite"></ol>
           <p id="typing-line" class="typing" hidden></p>
           <form id="chat-form" class="chat-form" autocomplete="off">
-            <input id="chat-input" type="text" maxlength="800" placeholder="escreve aí…" />
+            <button id="emoji-btn" class="icon-btn icon-btn-sm" type="button" title="Emoji">🙂</button>
+            <input id="chat-input" type="text" maxlength="800" placeholder="escreve aí… use @ pra chamar alguém" />
             <button class="btn btn-primary btn-send" type="submit" title="Enviar">
               <svg aria-hidden="true"><use href="#i-check" /></svg>
             </button>
           </form>
           <div id="reaction-row" class="reaction-row"></div>
+          <div id="sound-row" class="reaction-row sound-row"></div>
         </aside>
       </main>
 
@@ -294,6 +301,10 @@
             <svg aria-hidden="true"><use href="#i-chat" /></svg>
             <span class="ctrl-label">Conversa</span>
             <span id="chat-badge" class="badge" hidden>0</span>
+          </button>
+          <button id="status-btn" class="ctrl" type="button" title="Seu status">
+            <span id="status-dot" class="status-dot" data-status="ativo"></span>
+            <span class="ctrl-label" id="status-label">Disponível</span>
           </button>
           <button id="settings-btn" class="ctrl" type="button" aria-expanded="false" title="Ajustes">
             <svg aria-hidden="true"><use href="#i-gear" /></svg>
@@ -357,6 +368,15 @@
             <input id="spatial-check" type="checkbox" checked />
             <span>Áudio espacial</span>
           </label>
+          <label class="field">
+            <span class="field-label">Efeito na sua voz</span>
+            <select id="effect-select">
+              <option value="none">Sem efeito</option>
+              <option value="grave">Grave</option>
+              <option value="agudo">Agudo</option>
+              <option value="robo">Robô</option>
+            </select>
+          </label>
           <label class="switch">
             <input id="sounds-check" type="checkbox" checked />
             <span>Som ao entrar e sair</span>
@@ -397,9 +417,13 @@
               <option value="light">Claro</option>
             </select>
           </label>
-          <label class="switch">
-            <input id="compact-check" type="checkbox" />
-            <span>Modo compacto (lista)</span>
+          <label class="field">
+            <span class="field-label">Arrumação dos cards</span>
+            <select id="layout-select">
+              <option value="grade">Grade</option>
+              <option value="foco">Foco em quem fala</option>
+              <option value="lista">Lista compacta</option>
+            </select>
           </label>
           <label class="switch">
             <input id="privacy-check" type="checkbox" />
@@ -463,9 +487,17 @@
           <span class="field-label">Mensagem fixada</span>
           <input id="room-pin" type="text" maxlength="200" placeholder="link da pauta, combinado do dia…" />
         </label>
+        <label class="field">
+          <span class="field-label">Abrir só a partir de <span class="hint">(opcional)</span></span>
+          <input id="room-schedule" type="datetime-local" />
+        </label>
         <label class="switch">
           <input id="room-lock" type="checkbox" />
           <span>Trancar a toca (ninguém novo entra)</span>
+        </label>
+        <label class="switch">
+          <input id="room-waiting" type="checkbox" />
+          <span>Sala de espera (você aceita quem chega)</span>
         </label>
         <div class="dlg-actions">
           <button id="mute-all-btn" class="btn btn-quiet" type="button">Silenciar todo mundo</button>
