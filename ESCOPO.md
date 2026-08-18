@@ -4,9 +4,10 @@
 > teste automatizado. As tabelas guardam a decisão original de cada um; o que
 > mudou de forma durante a execução está anotado na própria linha.
 >
-> Provas: `npm run test:unit` (11 testes), `npm run test:signaling` (45 checks),
-> `npm run test:e2e` (37 checks no Chrome com mídia real) e
-> `npm run test:browsers` (12 checks, Firefox ↔ Chromium e motor do Safari).
+> Provas: `npm run test:unit` (12 testes), `npm run test:signaling` (45 checks),
+> `npm run test:e2e` (37 checks no Chrome com mídia real, e 35 contra o deploy
+> com `FORCE_RELAY=1`) e `npm run test:browsers` (12 checks, Firefox ↔ Chromium
+> e motor do Safari).
 
 Uma toca só, sempre aberta: quem abre o site digita um nome, entra e fala. Voz,
 tela e câmera, sem cadastro e sem instalar nada.
