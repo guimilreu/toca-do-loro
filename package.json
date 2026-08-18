@@ -1,6 +1,6 @@
 {
   "name": "toca-do-loro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Uma toca só: voz e compartilhamento de tela, sem cadastro.",
   "type": "module",
