@@ -418,6 +418,29 @@ try {
   );
   check('QR do convite é legível e bate com o link', convite.lido === convite.url, convite.url);
 
+  /* ---------- rede apertada ---------- */
+  // Não dá pra derrubar pacote de UDP daqui, mas dá pra estrangular o encoder:
+  // se a call aguenta 16 kbps de voz e 720p, aguenta rede ruim de verdade.
+  const magra = await Page.open(cdp, 'Magra');
+  await magra.eval(
+    `localStorage.setItem('toca:voiceKbps', '16');
+     localStorage.setItem('toca:quality', '"720p30"');
+     localStorage.setItem('toca:gate', 'false');
+     return true;`,
+  );
+  await magra.eval(`location.reload(); return true;`);
+  await sleep(1200);
+  await magra.join('Magra');
+  await magra.until(`window.__pcs.length >= 1 && window.__pcs.some((pc) => pc.connectionState === 'connected')`, {
+    label: 'conecta no modo magro',
+    timeout: 20_000,
+  });
+  await sleep(3000);
+  const audioMagro = await magra.stats((s) => !s.dir && s.kind === 'audio' && s.packets > 0);
+  check('call sobrevive com voz em 16 kbps', audioMagro.length > 0, JSON.stringify(audioMagro.map((s) => s.packets)));
+  await magra.eval(`document.getElementById('leave-btn').click(); return true;`, { userGesture: true });
+  await sleep(400);
+
   /* ---------- saída ---------- */
   await bia.eval(`document.getElementById('leave-btn').click(); return true;`, { userGesture: true });
   await ana.until(`document.querySelectorAll('#grid .card').length === 1`, { label: 'card removido' });

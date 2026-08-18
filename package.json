@@ -16,7 +16,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc -p jsconfig.json",
-    "test:unit": "node --test test/unit.test.mjs"
+    "test:unit": "node --test test/unit.test.mjs",
+    "test:browsers": "node test/browsers.mjs"
   },
   "dependencies": {
     "ws": "^8.21.3"
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^26.2.0",
     "eslint": "^10.8.1",
+    "playwright": "^1.62.1",
     "prettier": "^3.9.6",
     "typescript": "^7.0.2"
   }
