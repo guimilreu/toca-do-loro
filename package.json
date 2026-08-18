@@ -1,0 +1,20 @@
+{
+  "name": "starpink",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Uma única call pública: voz e compartilhamento de tela, sem cadastro.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node test/signaling.test.mjs && node test/e2e.mjs",
+    "test:signaling": "node test/signaling.test.mjs",
+    "test:e2e": "node test/e2e.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}
