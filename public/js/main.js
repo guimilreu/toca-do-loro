@@ -4,8 +4,8 @@ import { Mesh } from './mesh.js';
 import * as ui from './ui.js';
 import { Signaling } from './signaling.js';
 
-const NAME_KEY = 'starpink:name';
-const MIC_KEY = 'starpink:mic';
+const NAME_KEY = 'toca:name';
+const MIC_KEY = 'toca:mic';
 
 const state = {
   self: null,
@@ -105,7 +105,7 @@ signaling
   .on('reconnecting', () => ui.setConnection('reconectando…', 'idle'));
 
 const lobbyText = (count) =>
-  count === 0 ? 'ninguém na sala agora' : count === 1 ? '1 pessoa na sala agora' : `${count} pessoas na sala agora`;
+  count === 0 ? 'ninguém na toca agora' : count === 1 ? '1 pessoa na toca agora' : `${count} pessoas na toca agora`;
 
 /* ============ participantes ============ */
 
@@ -297,7 +297,7 @@ function failJoin(message) {
   state.inCall = false;
   ui.setJoinError(message);
   ui.els.joinBtn.disabled = false;
-  ui.els.joinBtn.textContent = 'Entrar na call';
+  ui.els.joinBtn.textContent = 'Entrar na toca';
 }
 
 /* ============ controles ============ */

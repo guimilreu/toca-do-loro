@@ -1,22 +1,33 @@
 /* ============ tokens ============ */
+/* Noite carioca: azul-arara profundo, amarelo louro, verde e rosa de bloco. */
 :root {
-  --bg: #0c0a12;
-  --bg-soft: #120f1b;
-  --surface: #17131f;
-  --surface-2: #1e1929;
-  --line: #2a2338;
-  --line-soft: #221c2f;
-  --text: #f3eff8;
-  --muted: #9b91ad;
-  --accent: #ff4d9d;
-  --accent-soft: #ff85bd;
-  --accent-dim: rgba(255, 77, 157, 0.14);
-  --danger: #ff5f56;
-  --ok: #3ddc97;
-  --warn: #ffbe4d;
+  --bg: #071429;
+  --bg-soft: #0b1d38;
+  --surface: #0e2340;
+  --surface-2: #14304f;
+  --line: #1f4270;
+  --line-soft: #17355c;
+  --text: #eaf2ff;
+  --muted: #8ba5c9;
+
+  --arara: #2e7bff;
+  --arara-deep: #1b4fd8;
+  --louro: #ffc61e;
+  --louro-soft: #ffd85c;
+  --verde: #12d18e;
+  --laranja: #ff6a3d;
+  --rosa: #ff3e8e;
+
+  --accent: var(--louro);
+  --accent-soft: var(--louro-soft);
+  --accent-dim: rgba(255, 198, 30, 0.16);
+  --speaking: var(--verde);
+  --danger: #ff5c5c;
+  --ok: var(--verde);
+  --warn: var(--louro);
   --radius: 16px;
   --radius-sm: 11px;
-  --shadow: 0 18px 40px -20px rgba(0, 0, 0, 0.9);
+  --shadow: 0 20px 44px -22px rgba(0, 0, 0, 0.95);
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
@@ -31,9 +42,13 @@ body {
 
 body {
   margin: 0;
+  /* Campo de cor: azul-arara no alto, verde e louro nas bordas, laranja no pé.
+     Sem padrão nem textura — a geometria fica na marca e nos cards. */
   background:
-    radial-gradient(120% 90% at 50% -20%, rgba(255, 77, 157, 0.16), transparent 60%),
-    radial-gradient(80% 60% at 100% 100%, rgba(120, 77, 255, 0.1), transparent 65%),
+    radial-gradient(70% 55% at 18% 0%, rgba(46, 123, 255, 0.30), transparent 62%),
+    radial-gradient(55% 45% at 92% 8%, rgba(18, 209, 142, 0.20), transparent 60%),
+    radial-gradient(60% 50% at 100% 92%, rgba(255, 198, 30, 0.16), transparent 62%),
+    radial-gradient(65% 55% at 6% 100%, rgba(255, 62, 142, 0.16), transparent 62%),
     var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -79,12 +94,12 @@ svg {
   letter-spacing: -0.02em;
 }
 
-.brand-star {
-  width: 22px;
-  height: 22px;
-  fill: var(--accent);
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
   stroke: none;
-  filter: drop-shadow(0 0 10px rgba(255, 77, 157, 0.6));
+  filter: drop-shadow(0 3px 10px rgba(7, 20, 41, 0.7));
 }
 
 .brand-sm {
@@ -92,9 +107,9 @@ svg {
   gap: 7px;
 }
 
-.brand-sm .brand-star {
-  width: 16px;
-  height: 16px;
+.brand-sm .brand-mark {
+  width: 22px;
+  height: 22px;
 }
 
 /* ============ entrada ============ */
@@ -108,11 +123,11 @@ svg {
 }
 
 .join-card {
-  width: min(390px, 100%);
+  width: min(392px, 100%);
   padding: 30px 28px 24px;
   border: 1px solid var(--line);
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(38, 30, 52, 0.9), rgba(19, 15, 27, 0.92));
+  background: linear-gradient(180deg, rgba(20, 48, 79, 0.86), rgba(7, 20, 41, 0.92));
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
 }
@@ -157,7 +172,7 @@ select:focus {
 }
 
 input::placeholder {
-  color: #6b6379;
+  color: #6f8ab0;
 }
 
 .btn {
@@ -180,9 +195,9 @@ input::placeholder {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, var(--accent-soft), var(--accent));
-  color: #2a0316;
-  box-shadow: 0 10px 24px -12px rgba(255, 77, 157, 0.9);
+  background: linear-gradient(180deg, var(--louro-soft), var(--louro));
+  color: #3a2a00;
+  box-shadow: 0 12px 26px -12px rgba(255, 198, 30, 0.75);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -227,7 +242,7 @@ input::placeholder {
 
 .dot-on {
   background: var(--ok);
-  box-shadow: 0 0 8px rgba(61, 220, 151, 0.7);
+  box-shadow: 0 0 8px rgba(18, 209, 142, 0.7);
   animation: none;
 }
 
@@ -315,6 +330,7 @@ input::placeholder {
 
 .card {
   position: relative;
+  backdrop-filter: blur(6px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -338,8 +354,8 @@ input::placeholder {
 }
 
 .card.speaking {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 0 26px -6px rgba(255, 77, 157, 0.55);
+  border-color: var(--speaking);
+  box-shadow: 0 0 0 1px var(--speaking), 0 0 26px -6px rgba(18, 209, 142, 0.55);
 }
 
 .avatar {
@@ -348,7 +364,7 @@ input::placeholder {
   width: 66px;
   height: 66px;
   border-radius: 50%;
-  background: var(--av-bg, #3a3050);
+  background: var(--av-bg, var(--arara-deep));
   color: #fff;
   font-size: 25px;
   font-weight: 700;
@@ -387,8 +403,8 @@ input::placeholder {
   left: 10px;
   padding: 3px 8px;
   border-radius: 999px;
-  background: var(--accent-dim);
-  color: var(--accent-soft);
+  background: rgba(46, 123, 255, 0.2);
+  color: #9dc2ff;
   font-size: 11px;
   font-weight: 600;
 }
@@ -481,7 +497,7 @@ input::placeholder {
   height: 38px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(12, 10, 18, 0.72);
+  background: rgba(7, 20, 41, 0.72);
   color: var(--text);
   cursor: pointer;
   backdrop-filter: blur(6px);
@@ -538,7 +554,7 @@ input::placeholder {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: rgba(23, 19, 31, 0.82);
+  background: rgba(11, 29, 56, 0.86);
   box-shadow: var(--shadow);
   backdrop-filter: blur(14px);
 }
@@ -564,7 +580,7 @@ input::placeholder {
 }
 
 .ctrl:hover {
-  border-color: #3b3150;
+  border-color: var(--arara);
 }
 
 .ctrl:active {
@@ -636,7 +652,7 @@ input::placeholder {
   padding: 10px 16px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(23, 19, 31, 0.95);
+  background: rgba(11, 29, 56, 0.95);
   color: var(--text);
   font-size: 13.5px;
   box-shadow: var(--shadow);

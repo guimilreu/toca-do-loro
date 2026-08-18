@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>starpink — call pública</title>
-    <meta name="description" content="Uma única call pública. Entre com seu nome, fale e compartilhe a tela." />
-    <meta name="theme-color" content="#0c0a12" />
+    <title>Toca do Loro — call aberta</title>
+    <meta name="description" content="Uma toca só: entre com seu nome, fale e compartilhe a tela. Sem cadastro." />
+    <meta name="theme-color" content="#071429" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -40,8 +40,14 @@
         <circle cx="12" cy="12" r="3" />
         <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.8 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.3a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1Z" />
       </symbol>
-      <symbol id="i-star" viewBox="0 0 24 24">
-        <path d="M12 2.5 14.1 9h6.9l-5.6 4 2.2 6.6-5.6-4-5.6 4L8.6 13 3 9h6.9L12 2.5Z" />
+      <symbol id="i-loro" viewBox="0 0 64 64">
+        <path d="M29 18 L33 3 L40 15 Z" fill="#12d18e" />
+        <path d="M38 15 L50 6 L48 20 Z" fill="#ff6a3d" />
+        <circle cx="36" cy="33" r="17" fill="#2e7bff" />
+        <path d="M23 26 L5 33 L23 40 Z" fill="#ffc61e" />
+        <path d="M23 36 L12 39 L23 43 Z" fill="#ff6a3d" />
+        <circle cx="34" cy="28" r="5.4" fill="#071429" />
+        <circle cx="35.8" cy="26.4" r="1.7" fill="#eaf2ff" />
       </symbol>
     </svg>
 
@@ -49,10 +55,10 @@
     <section id="view-join" class="view view-join">
       <div class="join-card">
         <div class="brand">
-          <svg class="brand-star" aria-hidden="true"><use href="#i-star" /></svg>
-          <span>starpink</span>
+          <svg class="brand-mark" aria-hidden="true"><use href="#i-loro" /></svg>
+          <span>Toca do Loro</span>
         </div>
-        <p class="join-sub">Uma sala só. Voz e tela, sem cadastro.</p>
+        <p class="join-sub">Uma toca só. Voz e tela, sem cadastro.</p>
 
         <form id="join-form" autocomplete="off" novalidate>
           <label class="field">
@@ -62,12 +68,12 @@
               name="name"
               type="text"
               maxlength="24"
-              placeholder="como querem te chamar?"
+              placeholder="como te chamam?"
               required
               autofocus
             />
           </label>
-          <button id="join-btn" class="btn btn-primary btn-block" type="submit">Entrar na call</button>
+          <button id="join-btn" class="btn btn-primary btn-block" type="submit">Entrar na toca</button>
         </form>
 
         <p id="lobby-status" class="lobby-status">
@@ -75,19 +81,19 @@
         </p>
         <p id="join-error" class="alert" hidden></p>
       </div>
-      <p class="join-foot">Sem gravação, sem histórico. A mídia vai direto de pessoa para pessoa (P2P).</p>
+      <p class="join-foot">Sem gravação, sem histórico. A voz vai direto de uma pessoa pra outra (P2P).</p>
     </section>
 
     <!-- ============ Call ============ -->
     <section id="view-call" class="view view-call" hidden>
       <header class="topbar">
         <div class="brand brand-sm">
-          <svg class="brand-star" aria-hidden="true"><use href="#i-star" /></svg>
-          <span id="room-name">starpink</span>
+          <svg class="brand-mark" aria-hidden="true"><use href="#i-loro" /></svg>
+          <span id="room-name">Toca do Loro</span>
         </div>
         <div class="topbar-right">
           <span id="conn-pill" class="pill"><span class="dot dot-idle"></span><span id="conn-text">conectando</span></span>
-          <span id="count-pill" class="pill pill-quiet">1 na call</span>
+          <span id="count-pill" class="pill pill-quiet">1 na toca</span>
         </div>
       </header>
 
@@ -127,7 +133,7 @@
               <div class="meter"><div id="mic-meter" class="meter-fill"></div></div>
             </div>
           </div>
-          <button id="leave-btn" class="ctrl ctrl-danger" type="button" title="Sair da call">
+          <button id="leave-btn" class="ctrl ctrl-danger" type="button" title="Sair da toca">
             <svg aria-hidden="true"><use href="#i-leave" /></svg>
             <span class="ctrl-label">Sair</span>
           </button>

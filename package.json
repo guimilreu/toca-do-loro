@@ -1,8 +1,8 @@
 {
-  "name": "starpink",
+  "name": "toca-do-loro",
   "version": "1.0.0",
   "private": true,
-  "description": "Uma única call pública: voz e compartilhamento de tela, sem cadastro.",
+  "description": "Uma toca só: voz e compartilhamento de tela, sem cadastro.",
   "type": "module",
   "engines": {
     "node": ">=20.6"

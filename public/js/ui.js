@@ -45,10 +45,22 @@ function initials(name) {
   return chars.join('').toUpperCase() || '?';
 }
 
+/** Paleta tropical: arara, verde, louro, laranja, rosa de bloco, turquesa e roxo. */
+const CORES_AVATAR = [
+  ['#2e7bff', '#1b4fd8'],
+  ['#12d18e', '#0a8f63'],
+  ['#ffc61e', '#f0930c'],
+  ['#ff6a3d', '#dd4218'],
+  ['#ff3e8e', '#cf1f66'],
+  ['#00c9cf', '#00808c'],
+  ['#a06bff', '#6a35d6'],
+];
+
 function avatarColor(name) {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 360;
-  return `linear-gradient(150deg, hsl(${hash} 70% 58%), hsl(${(hash + 42) % 360} 65% 44%))`;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 9973;
+  const [claro, escuro] = CORES_AVATAR[hash % CORES_AVATAR.length];
+  return `linear-gradient(150deg, ${claro}, ${escuro})`;
 }
 
 const icon = (href, className) => {
@@ -72,7 +84,7 @@ export function showJoin() {
   els.callView.hidden = true;
   els.joinView.hidden = false;
   els.joinBtn.disabled = false;
-  els.joinBtn.textContent = 'Entrar na call';
+  els.joinBtn.textContent = 'Entrar na toca';
 }
 
 export function setJoinError(message) {
@@ -91,7 +103,7 @@ export function setConnection(text, state) {
 }
 
 export function setCount(count) {
-  els.countPill.textContent = count === 1 ? '1 na call' : `${count} na call`;
+  els.countPill.textContent = count === 1 ? '1 na toca' : `${count} na toca`;
 }
 
 /* ---------- participantes ---------- */

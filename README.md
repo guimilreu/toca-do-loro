@@ -1,14 +1,19 @@
-# starpink
+# Toca do Loro
 
-Uma única call pública. Quem abre o site digita um nome, entra e já fala — voz e
-compartilhamento de tela, sem cadastro, sem sala pra criar, sem câmera.
+Uma toca só, sempre aberta. Quem abre o site digita um nome, entra e já fala —
+voz e compartilhamento de tela, sem cadastro, sem sala pra criar, sem câmera.
+
+A identidade é carioca de propósito: azul-arara no fundo, amarelo de Louro José
+nos botões, verde em quem está falando, e a onda do calçadão de Copacabana
+desenhada como padrão SVG no fundo — sem canvas, sem WebGL, sem custo nenhum
+de runtime.
 
 ## Como funciona
 
 - **Mídia é P2P (mesh)**: cada participante abre uma `RTCPeerConnection` com cada
   um dos outros. Áudio e vídeo nunca passam pelo servidor.
 - **O servidor só sinaliza**: relaya SDP/ICE e mantém a lista de quem está na sala.
-  Nada é gravado nem persistido — sala vazia é sala zerada.
+  Nada é gravado nem persistido — toca vazia é toca zerada.
 - **Sem renegociação**: cada conexão nasce com três transceivers em ordem fixa
   (microfone, áudio da tela, vídeo da tela). Ligar/desligar mic ou tela é só um
   `replaceTrack` — não há novo offer/answer no meio da call.
@@ -31,7 +36,7 @@ Configuração por variável de ambiente (veja `.env.example`):
 | variável | padrão | para quê |
 | --- | --- | --- |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | onde escutar |
-| `ROOM_NAME` | `Sala pública` | nome exibido no topo |
+| `ROOM_NAME` | `Toca do Loro` | nome exibido no topo |
 | `MAX_PEERS` | `12` | teto de gente simultânea |
 | `STUN_URLS` | STUN público do Google | descoberta de IP externo |
 | `TURN_URLS` | vazio | relay pra redes fechadas (obrigatório na prática) |
@@ -82,7 +87,7 @@ que a interface diz. `CHROME_PATH=... npm run test:e2e` aponta outro binário;
          - --listening-port=3478
          - --min-port=49160
          - --max-port=49200
-         - --realm=starpink
+         - --realm=tocadoloro
          - --use-auth-secret
          - --static-auth-secret=TROQUE_ESTE_SEGREDO
          - --no-tls

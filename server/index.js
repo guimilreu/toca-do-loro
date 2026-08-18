@@ -8,7 +8,7 @@ import { serveStatic } from './static.js';
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const MAX_PEERS = Number(process.env.MAX_PEERS || 12);
-const ROOM_NAME = process.env.ROOM_NAME || 'Sala pública';
+const ROOM_NAME = process.env.ROOM_NAME || 'Toca do Loro';
 const HEARTBEAT_MS = 30_000;
 const TURN_TTL_SECONDS = 12 * 3600;
 
@@ -68,7 +68,7 @@ wss.on('close', () => clearInterval(heartbeat));
 
 server.listen(PORT, HOST, () => {
   const turn = list(process.env.TURN_URLS);
-  console.log(`starpink em http://localhost:${PORT}  (sala "${ROOM_NAME}", max ${MAX_PEERS})`);
+  console.log(`Toca do Loro em http://localhost:${PORT}  (toca "${ROOM_NAME}", max ${MAX_PEERS})`);
   console.log(
     turn.length
       ? `TURN: ${turn.join(', ')} (${process.env.TURN_SECRET ? 'credencial temporária' : 'credencial fixa'})`

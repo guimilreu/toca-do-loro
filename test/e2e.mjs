@@ -161,7 +161,7 @@ class Page {
 }
 
 /* ---------- execução ---------- */
-const profile = mkdtempSync(path.join(tmpdir(), 'starpink-e2e-'));
+const profile = mkdtempSync(path.join(tmpdir(), 'toca-e2e-'));
 let chrome;
 let server = REMOTE ? null : await startServer(PORT);
 
