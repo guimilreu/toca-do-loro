@@ -87,6 +87,23 @@ test('dono sai e o bastão passa pra próxima pessoa', () => {
   assert.equal(outro.role, 'owner');
 });
 
+test('toca vazia esquece dono, tranca e senha', () => {
+  const ws = { readyState: 1, OPEN: 1, send() {} };
+  const room = new Room({ slug: 'x', name: 'X', maxPeers: 9 });
+
+  const dono = room.add(ws, { name: 'Dono', ownerKey: 'a' });
+  room.setPassword('123');
+  room.locked = true;
+  room.blocked.add('alguem');
+  room.remove(dono.id);
+
+  assert.equal(room.ownerKey, null);
+  assert.equal(room.locked, false);
+  assert.equal(room.needsPassword, false);
+  assert.equal(room.blocked.size, 0);
+  assert.equal(room.add(ws, { name: 'Nova', ownerKey: 'b' }).role, 'owner', 'quem chega depois assume');
+});
+
 test('nota da chamada acompanha a degradação', () => {
   const boa = mos({ rtt: 20, jitter: 0.002, loss: 0 });
   const media = mos({ rtt: 120, jitter: 0.02, loss: 0.02 });

@@ -197,7 +197,18 @@ export class Room {
 
     clearTimeout(peer.dropTimer);
     this.peers.delete(id);
-    if (!this.peers.size) this.emptySince = Date.now();
+
+    // Toca vazia volta ao estado de fábrica: sem dono, sem tranca, sem senha.
+    // Sem isso a toca fixa ficaria dona de alguém que foi embora faz três dias.
+    if (!this.peers.size) {
+      this.emptySince = Date.now();
+      this.ownerKey = null;
+      this.locked = false;
+      this.passwordHash = null;
+      this.waitingEnabled = false;
+      this.pinned = null;
+      this.blocked.clear();
+    }
 
     // O bastão de dono passa pra quem estiver há mais tempo na sala.
     if (peer.role === 'owner') {
