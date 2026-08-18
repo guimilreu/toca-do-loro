@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 
@@ -21,13 +22,19 @@ const list = (value, fallback = '') =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-/** Versão exibida na interface: o commit, quando o git está por perto. */
+/**
+ * Versão exibida na interface. No container não existe git, então a versão do
+ * package.json é o que sobra — e é o suficiente pra saber se o cliente está velho.
+ */
 function readVersion() {
   if (process.env.APP_VERSION) return process.env.APP_VERSION;
+
+  const pacote = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   try {
-    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    const commit = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return `${pacote.version}+${commit}`;
   } catch {
-    return 'dev';
+    return pacote.version;
   }
 }
 
