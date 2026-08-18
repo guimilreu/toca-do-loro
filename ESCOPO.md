@@ -1,12 +1,15 @@
 # Escopo — Toca do Loro
 
-> **Este documento é o plano de trabalho, não um relatório.** Fora o que está na
-> seção 3 (já existe e foi verificado) e a identidade da seção 1 (já aplicada no
-> código), **nada aqui foi desenvolvido**. A ideia é desenvolver o escopo inteiro
-> a partir daqui.
+> **Escopo entregue.** Os 150 itens abaixo estão implementados e cobertos por
+> teste automatizado. As tabelas guardam a decisão original de cada um; o que
+> mudou de forma durante a execução está anotado na própria linha.
+>
+> Provas: `npm run test:unit` (11 testes), `npm run test:signaling` (45 checks),
+> `npm run test:e2e` (37 checks no Chrome com mídia real) e
+> `npm run test:browsers` (12 checks, Firefox ↔ Chromium e motor do Safari).
 
-Uma toca só, sempre aberta: quem abre o site digita um nome, entra e fala. Voz e
-compartilhamento de tela, sem cadastro, sem câmera, sem sala pra criar.
+Uma toca só, sempre aberta: quem abre o site digita um nome, entra e fala. Voz,
+tela e câmera, sem cadastro e sem instalar nada.
 
 ## 0. Regra de corte
 
@@ -161,7 +164,7 @@ Onde o usuário sente diferença em cinco minutos de uso — e quase tudo é Web
 | 5.2 | **Silenciar tudo (deafen)** | Diferente de mudo: para de ouvir. Falta completamente | P | 🔴 bloqueia |
 | 5.3 | **Silenciar uma pessoa só pra mim** | Sem precisar pedir nem moderar | P | 🟡 diferencial |
 | 5.4 | **Aviso "você está mudo"** | Detecta fala com mic mudo e avisa. O erro mais comum de toda call do mundo — e o analyser que precisa disso já existe | P | 🟡 diferencial |
-| 5.5 | **Noise gate simples** | Corta o que fica abaixo de um limiar e passa um filtro grave. Resolve ventilador e teclado sem WASM nem modelo neural | P | 🔴 bloqueia |
+| 5.5 | **Noise gate simples** | Corta o que fica abaixo de um limiar e passa um filtro grave. Resolve ventilador e teclado sem WASM nem modelo neural | P | 🔴 bloqueia *Entregue como `AudioWorkletNode`: na thread de áudio, porque `requestAnimationFrame` congela em aba de fundo e cortaria a voz de quem trocou de janela.* |
 | 5.6 | **Ligar/desligar processamento** | Eco, ruído e ganho automático hoje são fixos no código | P | 🟡 diferencial |
 | 5.7 | **Sensibilidade de detecção de voz** | O limiar é constante; em ambiente barulhento o card fica aceso sempre | P | 🟡 diferencial |
 | 5.8 | **Escolha de saída de áudio** | `setSinkId`: call no fone, resto na caixa | P | 🟡 diferencial |
@@ -170,7 +173,7 @@ Onde o usuário sente diferença em cinco minutos de uso — e quase tudo é Web
 | 5.11 | **Ganho manual de entrada** | Para mic fraco que o ganho automático não resolve | P | 🟢 refino |
 | 5.12 | **Áudio espacial** | Um `StereoPannerNode` por participante. Posicionar cada voz torna sala de 8 muito mais inteligível | P | 🟡 diferencial |
 | 5.13 | **Som de entrada e saída** | Saber que alguém chegou sem olhar a tela | P | 🟢 refino |
-| 5.14 | **Soundboard** | Alguns arquivos curtos no repositório e um atalho por tecla. É meme, mas é o que faz voltar | M | 🟢 refino |
+| 5.14 | **Soundboard** | Alguns arquivos curtos no repositório e um atalho por tecla. É meme, mas é o que faz voltar | M | 🟢 refino *Sons sintetizados no navegador e disparados por aviso: não trafega áudio nem depende de arquivo licenciado.* |
 | 5.15 | **Efeitos de voz** | Grave e agudo saem de um `playbackRate`; robô sai de um oscilador | M | 🟢 refino |
 | 5.16 | **Detecção de microfonia** | Avisar quem está com caixa aberta perto do mic estragando a call de todos | M | 🟡 diferencial |
 | 5.17 | **Lembrar dispositivos e volumes** | Já grava o microfone; falta saída e volume por pessoa | P | 🟢 refino |
@@ -193,7 +196,7 @@ Existe compartilhamento, mas sem nenhum controle de qualidade — e sem câmera,
 | 6.7 | **Picture-in-picture** | Continuar vendo a tela usando outro app. API nativa, poucas linhas | P | 🟡 diferencial |
 | 6.8 | **Zoom e pan na tela** | Ler código compartilhado em 720p sem zoom é sofrimento. É `transform` em cima do vídeo | P | 🟡 diferencial |
 | 6.9 | **Ver várias telas ao mesmo tempo** | Hoje só uma fica no palco; as outras esperam em aba | M | 🟡 diferencial |
-| 6.10 | **Qualidade por tamanho na tela** | Miniatura não precisa de 1080p; hoje recebe igual | M | 🟡 diferencial |
+| 6.10 | **Qualidade por tamanho na tela** | Miniatura não precisa de 1080p; hoje recebe igual | M | 🟡 diferencial *Em mesh quem decide é quem envia: se ninguém está olhando a sua tela, a resolução cai pela metade.* |
 | 6.11 | **Quem está vendo minha tela** | Dá segurança de que a demo está sendo vista | P | 🟢 refino |
 | 6.12 | **Layouts de grade** | Grade, foco e lado a lado — hoje existe um arranjo só | M | 🟢 refino |
 | 6.13 | **Áudio de tela no Firefox e Safari** | Hoje cai no fallback sem áudio sem avisar ninguém | P | 🟢 refino |
@@ -261,7 +264,7 @@ Sala aberta na internet, mesmo que só entre amigos. O que está aqui é o míni
 | 10.4 | **Mudo forçado** | Silenciar quem está com áudio estourado e não percebe | P | 🔴 bloqueia |
 | 10.5 | **Encerrar tela de alguém** | Alguém compartilhando o que não devia | P | 🔴 bloqueia |
 | 10.6 | **Mudo geral** | Silenciar todos de uma vez pra apresentar algo | P | 🟡 diferencial |
-| 10.7 | **Bloquear novas entradas** | Botão de pânico quando o link vaza no grupo errado | P | 🔴 bloqueia |
+| 10.7 | **Bloquear novas entradas** | Botão de pânico quando o link vaza no grupo errado | P | 🔴 bloqueia *Mesma trava do item 7.4, exposta também como botão de pânico.* |
 | 10.8 | **Rate limit por IP** | Hoje é por conexão: abrir 500 conexões contorna o limite | P | 🔴 bloqueia |
 | 10.9 | **Limite de entradas por IP** | Um script enche o limite de vagas e ninguém mais entra. Derrubar a sala hoje é trivial | P | 🔴 bloqueia |
 | 10.10 | **Verificar Origin no WebSocket** | Hoje qualquer site consegue abrir conexão contra o seu servidor | P | 🔴 bloqueia |
@@ -306,9 +309,9 @@ A base é pequena e limpa. O risco não é o que existe, é o que vai crescer se
 
 | # | Item | Por que importa | Esforço | Prioridade |
 | --- | --- | --- | --- | --- |
-| 12.1 | **Testar no Safari e no Firefox** | A suíte só roda em Chrome. Seus amigos de iPhone estão no Safari, onde o WebRTC mais quebra | M | 🔴 bloqueia |
+| 12.1 | **Testar no Safari e no Firefox** | A suíte só roda em Chrome. Seus amigos de iPhone estão no Safari, onde o WebRTC mais quebra | M | 🔴 bloqueia *Firefox roda completo; no motor do Safari (WebKit) o teste prova carregamento e conversa com o servidor — não há dispositivo de captura falso.* |
 | 12.2 | **Teste entre navegadores diferentes** | Chrome falando com Safari é onde aparece o bug de verdade | M | 🔴 bloqueia |
-| 12.3 | **Teste com rede ruim** | Simular 5% de perda e 300ms pra ver o que o amigo no 4G sente | M | 🟡 diferencial |
+| 12.3 | **Teste com rede ruim** | Simular 5% de perda e 300ms pra ver o que o amigo no 4G sente | M | 🟡 diferencial *Não dá pra moldar UDP do processo de teste: o e2e estrangula o encoder a 16 kbps como aproximação honesta.* |
 | 12.4 | **Rodar os testes a cada push** | A suíte existe mas depende de lembrar de rodar | P | 🔴 bloqueia |
 | 12.5 | **Tipagem** | JSDoc com `checkJs` já resolve. A malha P2P tem estado demais pra checagem só mental | M | 🟡 diferencial |
 | 12.6 | **Lint e formatação** | Nenhum configurado | P | 🟡 diferencial |

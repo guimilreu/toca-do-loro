@@ -6,6 +6,9 @@
  *
  * npm run test:browsers
  */
+// Os trechos passados a page.evaluate rodam no navegador, com o `window` de lá:
+// checar tipos daqui só produziria ruído.
+// @ts-nocheck
 import { chromium, firefox, webkit } from 'playwright';
 
 import { reporter, sleep, startServer } from './helpers.mjs';

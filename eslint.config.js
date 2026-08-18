@@ -15,7 +15,7 @@ export default [
         RTCRtpSender: 'readonly', WebSocket: 'readonly', AudioWorkletNode: 'readonly',
         HTMLMediaElement: 'readonly', URL: 'readonly', URLSearchParams: 'readonly',
         TextEncoder: 'readonly', Element: 'readonly', BarcodeDetector: 'readonly',
-        confirm: 'readonly', prompt: 'readonly', alert: 'readonly',
+        confirm: 'readonly', prompt: 'readonly', alert: 'readonly', getComputedStyle: 'readonly',
         // worklet
         AudioWorkletProcessor: 'readonly', registerProcessor: 'readonly',
         currentTime: 'readonly', sampleRate: 'readonly',
