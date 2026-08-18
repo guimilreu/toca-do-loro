@@ -34,7 +34,9 @@ Configuração por variável de ambiente (veja `.env.example`):
 | `ROOM_NAME` | `Sala pública` | nome exibido no topo |
 | `MAX_PEERS` | `12` | teto de gente simultânea |
 | `STUN_URLS` | STUN público do Google | descoberta de IP externo |
-| `TURN_URLS` / `TURN_USERNAME` / `TURN_PASSWORD` | vazio | relay pra redes fechadas |
+| `TURN_URLS` | vazio | relay pra redes fechadas (obrigatório na prática) |
+| `TURN_SECRET` | vazio | segredo do coturn; gera credencial temporária por entrada |
+| `TURN_USERNAME` / `TURN_PASSWORD` | vazio | alternativa com credencial fixa |
 
 ```bash
 node --env-file=.env server/index.js
@@ -60,9 +62,40 @@ que a interface diz. `CHROME_PATH=... npm run test:e2e` aponta outro binário;
 1. **HTTPS é obrigatório.** `getUserMedia` e `getDisplayMedia` só existem em
    contexto seguro (exceto em `localhost`). Ponha atrás de um proxy com TLS e
    garanta o upgrade de WebSocket em `/ws`.
-2. **TURN é praticamente obrigatório.** Só com STUN, quem está atrás de NAT
-   simétrico ou firewall corporativo não fecha conexão. Suba um coturn ou use um
-   TURN gerenciado e preencha as variáveis acima.
+2. **TURN é obrigatório na prática.** Só com STUN, dois participantes atrás de
+   NAT simétrico/CGNAT não conseguem se conectar *entre si* — o sintoma é uma call
+   onde todo mundo ouve a mesma pessoa e mais ninguém. Suba um coturn:
+
+   ```yaml
+   services:
+     coturn:
+       image: coturn/coturn:4.7-alpine
+       restart: unless-stopped
+       network_mode: host
+       command:
+         - -n
+         - --log-file=stdout
+         - --listening-port=3478
+         - --min-port=49160
+         - --max-port=49200
+         - --realm=starpink
+         - --use-auth-secret
+         - --static-auth-secret=TROQUE_ESTE_SEGREDO
+         - --no-tls
+         - --no-dtls
+         - --no-cli
+         - --fingerprint
+         - --no-multicast-peers
+         - --denied-peer-ip=10.0.0.0-10.255.255.255
+         - --denied-peer-ip=172.16.0.0-172.31.255.255
+         - --denied-peer-ip=192.168.0.0-192.168.255.255
+         - --user-quota=12
+         - --total-quota=100
+   ```
+
+   Depois aponte `TURN_URLS` para ele e repita o mesmo segredo em `TURN_SECRET`.
+   As faixas privadas ficam negadas de propósito: sem isso, o relay público vira
+   porta de entrada pra rede interna do servidor.
 3. Sem estado no servidor: pode reiniciar à vontade (todo mundo cai e reconecta).
 
 ## Limites conhecidos

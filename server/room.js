@@ -20,6 +20,7 @@ export class Room {
   #peers = new Map();
   #lobby = new Set();
 
+  /** @param {{ name: string, maxPeers: number, iceServers: () => object[] }} options */
   constructor({ name, maxPeers, iceServers }) {
     this.name = name;
     this.maxPeers = maxPeers;
@@ -101,7 +102,7 @@ export class Room {
       type: 'welcome',
       self: publicPeer(peer),
       room: this.name,
-      iceServers: this.iceServers,
+      iceServers: this.iceServers(),
       peers: [...this.#peers.values()].filter((p) => p.id !== peer.id).map(publicPeer),
     });
     this.#broadcast({ type: 'peer-joined', peer: publicPeer(peer) }, peer.id);

@@ -118,7 +118,8 @@ export function upsertParticipant(peer) {
     const nameText = document.createElement('span');
     const micOff = icon('#i-mic-off');
     micOff.setAttribute('aria-label', 'microfone desligado');
-    micOff.hidden = true;
+    // SVGElement não tem a propriedade `hidden` do HTML: só o atributo esconde.
+    micOff.toggleAttribute('hidden', true);
     nameRow.append(nameText, micOff);
 
     const status = document.createElement('div');
@@ -143,15 +144,16 @@ export function upsertParticipant(peer) {
   card.avatar.textContent = initials(peer.name);
   card.avatar.style.setProperty('--av-bg', avatarColor(peer.name));
   card.tag.hidden = !peer.sharing;
-  card.micOff.hidden = !(peer.muted || !peer.hasMic);
+  card.micOff.toggleAttribute('hidden', !(peer.muted || !peer.hasMic));
   card.status.textContent = statusText(peer);
+  card.el.classList.toggle('broken', !peer.isLocal && (peer.connection === 'failed' || peer.connection === 'disconnected'));
 }
 
 function statusText(peer) {
+  if (peer.isLocal) return peer.hasMic ? (peer.muted ? 'seu microfone está mudo' : '') : 'só ouvindo';
+  if (peer.connection === 'failed' || peer.connection === 'disconnected') return 'sem conexão com você';
+  if (peer.connection === 'new' || peer.connection === 'connecting') return 'conectando…';
   if (!peer.hasMic) return 'só ouvindo';
-  if (peer.isLocal) return peer.muted ? 'seu microfone está mudo' : '';
-  if (peer.connection === 'connecting' || peer.connection === 'new') return 'conectando…';
-  if (peer.connection === 'failed') return 'sem conexão direta';
   return peer.muted ? 'mudo' : '';
 }
 

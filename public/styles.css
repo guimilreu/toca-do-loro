@@ -329,6 +329,14 @@ input::placeholder {
   transition: border-color 0.18s, box-shadow 0.18s;
 }
 
+.card.broken {
+  border-color: rgba(255, 95, 86, 0.55);
+}
+
+.card.broken .card-status {
+  color: #ff9d97;
+}
+
 .card.speaking {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent), 0 0 26px -6px rgba(255, 77, 157, 0.55);

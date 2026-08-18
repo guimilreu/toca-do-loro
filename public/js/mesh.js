@@ -10,6 +10,9 @@
 const ROLES = ['mic', 'screen-audio', 'screen-video'];
 const KIND_BY_ROLE = { mic: 'audio', 'screen-audio': 'audio', 'screen-video': 'video' };
 const SCREEN_MAX_BITRATE = 2_500_000;
+const MAX_ICE_RESTARTS = 3;
+/** 'disconnected' costuma se resolver sozinho; só reinicia o ICE se persistir. */
+const RECOVER_DELAY_MS = 4000;
 
 export class Mesh {
   #peers = new Map();
@@ -49,6 +52,8 @@ export class Mesh {
       ignoreOffer: false,
       senders: new Map(),
       chain: Promise.resolve(),
+      restarts: 0,
+      recoverTimer: null,
     };
     this.#peers.set(id, peer);
 
@@ -75,7 +80,15 @@ export class Mesh {
 
     pc.onconnectionstatechange = () => {
       this.onStateChange(id, pc.connectionState);
-      if (pc.connectionState === 'failed' && initiator) pc.restartIce();
+      if (pc.connectionState === 'connected') {
+        peer.restarts = 0;
+        clearTimeout(peer.recoverTimer);
+        return;
+      }
+      // Só um dos lados reinicia o ICE, senão os dois brigam por renegociação.
+      if (!initiator) return;
+      if (pc.connectionState === 'failed') this.#recover(peer, 0);
+      if (pc.connectionState === 'disconnected') this.#recover(peer, RECOVER_DELAY_MS);
     };
 
     if (initiator) {
@@ -88,6 +101,7 @@ export class Mesh {
     const peer = this.#peers.get(id);
     if (!peer) return;
 
+    clearTimeout(peer.recoverTimer);
     peer.pc.onicecandidate = null;
     peer.pc.ontrack = null;
     peer.pc.onnegotiationneeded = null;
@@ -98,6 +112,19 @@ export class Mesh {
 
   disconnectAll() {
     for (const id of this.ids) this.disconnect(id);
+  }
+
+  /** Nova rodada de ICE quando a conexão cai — cobre troca de rede e NAT teimoso. */
+  #recover(peer, delay) {
+    clearTimeout(peer.recoverTimer);
+    if (peer.restarts >= MAX_ICE_RESTARTS) return;
+
+    peer.recoverTimer = setTimeout(() => {
+      const state = peer.pc.connectionState;
+      if (state === 'connected' || state === 'closed') return;
+      peer.restarts += 1;
+      peer.pc.restartIce();
+    }, delay);
   }
 
   /** Troca uma trilha local em todas as conexões, sem renegociar. */

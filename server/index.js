@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 
@@ -9,6 +10,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 const MAX_PEERS = Number(process.env.MAX_PEERS || 12);
 const ROOM_NAME = process.env.ROOM_NAME || 'Sala pública';
 const HEARTBEAT_MS = 30_000;
+const TURN_TTL_SECONDS = 12 * 3600;
 
 const list = (value, fallback = '') =>
   (value ?? fallback)
@@ -16,12 +18,24 @@ const list = (value, fallback = '') =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+/**
+ * Monta a lista de ICE servers na hora de cada entrada.
+ * Com TURN_SECRET usa o TURN REST API: a credencial é um HMAC com validade,
+ * então o segredo do coturn nunca chega ao navegador e ninguém reaproveita o
+ * relay depois que expira.
+ */
 function buildIceServers() {
   const stun = list(process.env.STUN_URLS, 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302');
   const turn = list(process.env.TURN_URLS);
   const servers = stun.length ? [{ urls: stun }] : [];
+  if (!turn.length) return servers;
 
-  if (turn.length) {
+  const secret = process.env.TURN_SECRET;
+  if (secret) {
+    const username = String(Math.floor(Date.now() / 1000) + TURN_TTL_SECONDS);
+    const credential = createHmac('sha1', secret).update(username).digest('base64');
+    servers.push({ urls: turn, username, credential });
+  } else {
     servers.push({
       urls: turn,
       username: process.env.TURN_USERNAME || '',
@@ -31,7 +45,7 @@ function buildIceServers() {
   return servers;
 }
 
-const room = new Room({ name: ROOM_NAME, maxPeers: MAX_PEERS, iceServers: buildIceServers() });
+const room = new Room({ name: ROOM_NAME, maxPeers: MAX_PEERS, iceServers: buildIceServers });
 
 const server = http.createServer((req, res) => {
   if (req.url === '/healthz') {
@@ -53,9 +67,13 @@ const heartbeat = setInterval(() => room.sweep(), HEARTBEAT_MS);
 wss.on('close', () => clearInterval(heartbeat));
 
 server.listen(PORT, HOST, () => {
-  const turn = list(process.env.TURN_URLS).length;
+  const turn = list(process.env.TURN_URLS);
   console.log(`starpink em http://localhost:${PORT}  (sala "${ROOM_NAME}", max ${MAX_PEERS})`);
-  if (!turn) console.log('aviso: sem TURN configurado — redes com NAT simétrico podem não conectar.');
+  console.log(
+    turn.length
+      ? `TURN: ${turn.join(', ')} (${process.env.TURN_SECRET ? 'credencial temporária' : 'credencial fixa'})`
+      : 'aviso: sem TURN configurado — redes com NAT simétrico podem não conectar.',
+  );
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

@@ -15,7 +15,9 @@ import WebSocket from 'ws';
 import { reporter, sleep, startServer } from './helpers.mjs';
 
 const PORT = Number(process.env.TEST_PORT || 3211);
-const APP = `http://localhost:${PORT}/`;
+/** APP_URL aponta o teste para um deploy existente (smoke test de produção). */
+const REMOTE = process.env.APP_URL;
+const APP = REMOTE || `http://localhost:${PORT}/`;
 const DEBUG_PORT = 9333;
 const HEADLESS = process.env.HEADFUL ? [] : ['--headless=new'];
 
@@ -153,7 +155,7 @@ class Page {
 /* ---------- execução ---------- */
 const profile = mkdtempSync(path.join(tmpdir(), 'starpink-e2e-'));
 let chrome;
-let server = await startServer(PORT);
+let server = REMOTE ? null : await startServer(PORT);
 
 const cleanup = () => {
   chrome?.kill('SIGKILL');
@@ -232,6 +234,12 @@ try {
   check('áudio chega em Bia', inAudio.some((s) => s.packets > 0 && s.bytes > 0), JSON.stringify(inAudio));
   check('Ana está enviando áudio', outAudio.some((s) => s.packets > 0), JSON.stringify(outAudio));
 
+  const iconWhileOpen = await bia.eval(
+    `const svg = document.querySelector('#grid .card:not(.is-local) .card-name svg');
+     return getComputedStyle(svg).display;`,
+  );
+  check('sem mudo, o ícone de mic desligado fica escondido', iconWhileOpen === 'none', iconWhileOpen);
+
   await bia.focus();
   const remoteSpeaking = await bia.eval(`
     for (let i = 0; i < 30; i++) {
@@ -249,7 +257,8 @@ try {
     trackEnabled: window.__pcs[0].getSenders().find((s) => s.track && s.track.kind === 'audio')?.track.enabled,
   };`);
   const biaSeesMuted = await bia.eval(
-    `return !document.querySelector('#grid .card:not(.is-local) .card-name svg').hidden;`,
+    `const svg = document.querySelector('#grid .card:not(.is-local) .card-name svg');
+     return getComputedStyle(svg).display !== 'none';`,
   );
   check(
     'mudo desliga a trilha e propaga',
@@ -313,7 +322,10 @@ try {
   await ana.until(`document.querySelectorAll('#audio-sink audio').length === 2`, { label: 'áudio limpo' });
   check('saída limpa cards e elementos de áudio', true);
 
-  /* queda e volta do servidor no meio da call */
+  /* queda e volta do servidor no meio da call (só faz sentido no servidor local) */
+  if (REMOTE) {
+    console.log('SKIP  queda do servidor (rodando contra deploy remoto)');
+  } else {
   server.stop();
   server = null;
   await ana.until(`document.getElementById('conn-text').textContent !== 'conectado'`, { label: 'aviso de queda' });
@@ -333,6 +345,7 @@ try {
   await sleep(2500);
   const afterReconnect = await ana.stats((s) => !s.dir && s.kind === 'audio' && s.packets > 0);
   check('call volta sozinha depois da queda', afterReconnect.length >= 1, JSON.stringify(afterReconnect.map((s) => s.packets)));
+  }
 } catch (error) {
   check(`execução: ${error.message}`, false);
 } finally {
